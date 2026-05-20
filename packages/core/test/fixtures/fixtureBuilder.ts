@@ -23,6 +23,21 @@ export interface FixtureParagraph {
   paraId?: string;
   /** Render the run as bold. */
   bold?: boolean;
+  /** Italic run. */
+  italic?: boolean;
+  /** Underlined run. */
+  underline?: boolean;
+  /** Font size in half-points (e.g. 24 → 12pt). */
+  sizeHalfPoints?: number;
+  /** RGB hex (without leading #), e.g. "FF0000". */
+  colorHex?: string;
+  /** Paragraph alignment. */
+  align?: "left" | "center" | "right" | "justify";
+  /**
+   * Inline SDT to insert after the text run. Renders as a wrapped span
+   * with the given tag + alias.
+   */
+  inlineSdt?: { tag: string; alias: string };
 }
 
 /** Options for `buildDocxFixture`. */
@@ -35,6 +50,15 @@ export interface FixtureOptions {
   /** Skip the `<w:document>` element — produces a "missing document.xml" condition
    *  (actually a malformed XML); useful for negative tests. */
   malformed?: boolean;
+  /**
+   * Append a block-level SDT after the paragraphs. Contains the given
+   * paragraph texts as its body.
+   */
+  blockSdt?: {
+    tag: string;
+    alias: string;
+    paragraphs: Array<{ text: string; paraId?: string }>;
+  };
 }
 
 /**
@@ -64,6 +88,7 @@ export function buildDocumentXml(opts: FixtureOptions): string {
 
   const body = opts.paragraphs.map(renderParagraph).join("\n");
   const table = opts.includeTable ? TABLE_XML : "";
+  const blockSdt = opts.blockSdt ? renderBlockSdt(opts.blockSdt) : "";
 
   return `${prolog}<w:document
   xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -71,15 +96,75 @@ export function buildDocumentXml(opts: FixtureOptions): string {
   <w:body>
     ${body}
     ${table}
+    ${blockSdt}
   </w:body>
 </w:document>`;
 }
 
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function renderParagraph(p: FixtureParagraph): string {
   const paraIdAttr = p.paraId ? ` w14:paraId="${p.paraId}"` : "";
-  const boldOpen = p.bold ? "<w:rPr><w:b/></w:rPr>" : "";
-  const escapedText = p.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<w:p${paraIdAttr}><w:r>${boldOpen}<w:t xml:space="preserve">${escapedText}</w:t></w:r></w:p>`;
+
+  const pPrParts: string[] = [];
+  if (p.align) {
+    const jcVal = p.align === "justify" ? "both" : p.align;
+    pPrParts.push(`<w:jc w:val="${jcVal}"/>`);
+  }
+  const pPr = pPrParts.length ? `<w:pPr>${pPrParts.join("")}</w:pPr>` : "";
+
+  const rPrParts: string[] = [];
+  if (p.bold) rPrParts.push("<w:b/>");
+  if (p.italic) rPrParts.push("<w:i/>");
+  if (p.underline) rPrParts.push('<w:u w:val="single"/>');
+  if (p.sizeHalfPoints) rPrParts.push(`<w:sz w:val="${p.sizeHalfPoints}"/>`);
+  if (p.colorHex) rPrParts.push(`<w:color w:val="${p.colorHex}"/>`);
+  const rPr = rPrParts.length ? `<w:rPr>${rPrParts.join("")}</w:rPr>` : "";
+
+  const escapedText = escapeXml(p.text);
+  const run = `<w:r>${rPr}<w:t xml:space="preserve">${escapedText}</w:t></w:r>`;
+
+  const sdt = p.inlineSdt ? renderInlineSdt(p.inlineSdt) : "";
+
+  return `<w:p${paraIdAttr}>${pPr}${run}${sdt}</w:p>`;
+}
+
+function renderInlineSdt(s: { tag: string; alias: string }): string {
+  return `<w:sdt>
+    <w:sdtPr>
+      <w:tag w:val="${escapeXml(s.tag)}"/>
+      <w:alias w:val="${escapeXml(s.alias)}"/>
+    </w:sdtPr>
+    <w:sdtContent>
+      <w:r><w:t xml:space="preserve">${escapeXml(s.alias)}</w:t></w:r>
+    </w:sdtContent>
+  </w:sdt>`;
+}
+
+function renderBlockSdt(s: {
+  tag: string;
+  alias: string;
+  paragraphs: Array<{ text: string; paraId?: string }>;
+}): string {
+  const inner = s.paragraphs
+    .map(
+      (p) =>
+        `<w:p${p.paraId ? ` w14:paraId="${p.paraId}"` : ""}><w:r><w:t xml:space="preserve">${escapeXml(p.text)}</w:t></w:r></w:p>`,
+    )
+    .join("");
+  return `<w:sdt>
+    <w:sdtPr>
+      <w:tag w:val="${escapeXml(s.tag)}"/>
+      <w:alias w:val="${escapeXml(s.alias)}"/>
+    </w:sdtPr>
+    <w:sdtContent>${inner}</w:sdtContent>
+  </w:sdt>`;
 }
 
 // ─── Constant fixture parts (verbatim, byte-stable) ─────────────────────────
