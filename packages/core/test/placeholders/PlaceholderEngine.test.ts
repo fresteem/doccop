@@ -36,6 +36,7 @@ import {
   replace,
   unwrap,
   wrap,
+  wrapBareKey,
   wrapBlock,
 } from "../../src/placeholders/PlaceholderEngine.js";
 import { buildDocxFixture } from "../fixtures/fixtureBuilder.js";
@@ -848,5 +849,135 @@ describe("wrapBlock — non-body containers", () => {
     });
     expect(requisites).toBeDefined();
     expect((requisites?.parentNode as Element | null)?.localName).toBe("sdtContent");
+  });
+});
+
+describe("wrapBareKey (snippet authoring)", () => {
+  it("happy path: writes <w:tag w:val='edrpou'> with rPr preserved", () => {
+    const archive = setup({
+      paragraphs: [{ text: "Edrpou: 12345678", paraId: "AAAA0001", bold: true }],
+    });
+    const next = wrapBareKey(
+      archive,
+      { paraId: "AAAA0001", startRunIndex: 0, startOffset: 8, endRunIndex: 0, endOffset: 16 },
+      { key: "edrpou", alias: "EDRPOU", dataType: "edrpou" },
+    );
+    // The SDT carries a bare-key tag (no scope, no dot).
+    const sdt = findElements(next.document, W_NS, "sdt")[0];
+    expect(sdt).toBeDefined();
+    const sdtPr = findElements(sdt as Element, W_NS, "sdtPr")[0];
+    const tagEl = findElements(sdtPr as Element, W_NS, "tag")[0];
+    expect(tagEl?.getAttributeNS(W_NS, "val")).toBe("edrpou");
+    // rPr is preserved on the wrapped run.
+    const wrappedRuns = findElements(sdt as Element, W_NS, "r");
+    expect(wrappedRuns.length).toBeGreaterThan(0);
+    const firstRpr = findElements(wrappedRuns[0] as Element, W_NS, "rPr")[0];
+    expect(firstRpr).toBeDefined();
+    expect(findElements(firstRpr as Element, W_NS, "b")).toHaveLength(1);
+  });
+
+  it("rejects uppercase keys", () => {
+    const archive = setup({ paragraphs: [{ text: "X", paraId: "AAAA0002" }] });
+    expect(() =>
+      wrapBareKey(
+        archive,
+        { paraId: "AAAA0002", startRunIndex: 0, startOffset: 0, endRunIndex: 0, endOffset: 1 },
+        { key: "Edrpou", alias: "EDRPOU", dataType: "text" },
+      ),
+    ).toThrow(InvalidPlaceholderTagError);
+  });
+
+  it("rejects keys with a dot (would look like a scoped tag)", () => {
+    const archive = setup({ paragraphs: [{ text: "X", paraId: "AAAA0003" }] });
+    expect(() =>
+      wrapBareKey(
+        archive,
+        { paraId: "AAAA0003", startRunIndex: 0, startOffset: 0, endRunIndex: 0, endOffset: 1 },
+        { key: "party_a.name", alias: "Name", dataType: "text" },
+      ),
+    ).toThrow(InvalidPlaceholderTagError);
+  });
+
+  it("rejects empty keys", () => {
+    const archive = setup({ paragraphs: [{ text: "X", paraId: "AAAA0004" }] });
+    expect(() =>
+      wrapBareKey(
+        archive,
+        { paraId: "AAAA0004", startRunIndex: 0, startOffset: 0, endRunIndex: 0, endOffset: 1 },
+        { key: "", alias: "A", dataType: "text" },
+      ),
+    ).toThrow(InvalidPlaceholderTagError);
+  });
+
+  it("rejects overlap with an existing SDT (same guard as wrap)", () => {
+    // Two-run paragraph with an SDT between them. A wrap range that
+    // spans both runs crosses the existing SDT — performInlineWrap's
+    // guard (shared with wrap) raises OverlappingPlaceholderError.
+    const xml = `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:p w14:paraId="DEEDBEEF">
+      <w:r><w:t xml:space="preserve">A</w:t></w:r>
+      <w:sdt>
+        <w:sdtPr><w:tag w:val="party_a.existing"/><w:alias w:val="EX"/></w:sdtPr>
+        <w:sdtContent><w:r><w:t>existing</w:t></w:r></w:sdtContent>
+      </w:sdt>
+      <w:r><w:t xml:space="preserve">B</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>`;
+    const archive = parseDocXmlIntoFixture(xml);
+    expect(() =>
+      wrapBareKey(
+        archive,
+        { paraId: "DEEDBEEF", startRunIndex: 0, startOffset: 0, endRunIndex: 1, endOffset: 1 },
+        { key: "merged", alias: "Merged", dataType: "text" },
+      ),
+    ).toThrow(OverlappingPlaceholderError);
+  });
+
+  it("list() hides bare-key SDTs by default; surfaces them with includeBareKey=true", () => {
+    const archive = setup({ paragraphs: [{ text: "EDRPOU value", paraId: "AAAA0006" }] });
+    const wrapped = wrapBareKey(
+      archive,
+      { paraId: "AAAA0006", startRunIndex: 0, startOffset: 0, endRunIndex: 0, endOffset: 6 },
+      { key: "edrpou", alias: "EDRPOU", dataType: "edrpou" },
+    );
+    // Default: bare-key SDT not surfaced (preserves template-editor behaviour).
+    expect(list(wrapped)).toHaveLength(0);
+    // Opt-in: surfaced with scope="bareKey", key=tag.
+    const withBare = list(wrapped, new Map(), { includeBareKey: true });
+    expect(withBare).toHaveLength(1);
+    expect(withBare[0]?.scope).toBe("bareKey");
+    expect(withBare[0]?.key).toBe("edrpou");
+    expect(withBare[0]?.tag).toBe("edrpou");
+  });
+
+  it("unwrap removes a bare-key SDT by exact tag match", () => {
+    const archive = setup({ paragraphs: [{ text: "value here", paraId: "AAAA0007" }] });
+    const wrapped = wrapBareKey(
+      archive,
+      { paraId: "AAAA0007", startRunIndex: 0, startOffset: 0, endRunIndex: 0, endOffset: 5 },
+      { key: "name", alias: "Name", dataType: "text" },
+    );
+    expect(findElements(wrapped.document, W_NS, "sdt")).toHaveLength(1);
+    const unwrapped = unwrap(wrapped, "name");
+    expect(findElements(unwrapped.document, W_NS, "sdt")).toHaveLength(0);
+  });
+
+  it("survives serialize → parse → list round-trip with includeBareKey", () => {
+    const archive = setup({ paragraphs: [{ text: "Назва компанії", paraId: "AAAA0008" }] });
+    const wrapped = wrapBareKey(
+      archive,
+      { paraId: "AAAA0008", startRunIndex: 0, startOffset: 0, endRunIndex: 0, endOffset: 5 },
+      { key: "name", alias: "Назва", dataType: "text" },
+    );
+    const bytes = serialize(wrapped);
+    const reparsed = parse(bytes);
+    const placeholders = list(reparsed, new Map(), { includeBareKey: true });
+    expect(placeholders).toHaveLength(1);
+    expect(placeholders[0]?.scope).toBe("bareKey");
+    expect(placeholders[0]?.tag).toBe("name");
   });
 });

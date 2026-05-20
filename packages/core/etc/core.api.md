@@ -67,9 +67,46 @@ export class AuthForbiddenError extends DocCopError {
 }
 
 // @public
+export const BARE_KEY_PATTERN: RegExp;
+
+// @public
+export interface BareKeyPlaceholderSpec {
+    alias: string;
+    dataType: DataType;
+    key: string;
+}
+
+// @public
 export interface BlockWrapLocation {
     endParaId: string;
     startParaId: string;
+}
+
+// @public
+export interface CompiledToken {
+    key: string;
+    paragraphIndex: number;
+    paraId: string;
+}
+
+// @public
+export function compileTextTokens(archive: DocxArchive, options?: CompileTextTokensOptions): CompileTextTokensResult;
+
+// @public
+export interface CompileTextTokensOptions {
+    delimiters?: {
+        open: string;
+        close: string;
+    };
+    onUnknownKey?: "ignore" | "warn" | "error";
+    validateKey?: (key: string) => boolean;
+}
+
+// @public
+export interface CompileTextTokensResult {
+    archive: DocxArchive;
+    compiled: CompiledToken[];
+    skipped: SkippedToken[];
 }
 
 // @public
@@ -207,7 +244,12 @@ export class InvalidPlaceholderTagError extends DocCopError {
 }
 
 // @public
-export function list(archive: DocxArchive, dataTypes?: ReadonlyMap<string, DataType>): Placeholder[];
+export function list(archive: DocxArchive, dataTypes?: ReadonlyMap<string, DataType>, options?: ListOptions): Placeholder[];
+
+// @public
+export interface ListOptions {
+    includeBareKey?: boolean;
+}
 
 // @public
 export function listParagraphs(archive: DocxArchive): Array<{
@@ -467,6 +509,12 @@ export function serializeArchive(archive: DocxArchive): Uint8Array;
 export function serializeXml(doc: Document): string;
 
 // @public
+export interface SkippedToken {
+    raw: string;
+    reason: string;
+}
+
+// @public
 export class SnippetCannotContainRequisitesError extends DocCopError {
     constructor(foundTag: string);
     // (undocumented)
@@ -541,10 +589,13 @@ export type UserId = string;
 export function validateAlias(tag: string, alias: string): void;
 
 // @public
+export function validateBareKey(key: string): void;
+
+// @public
 export function validateValue(dataType: DataType, tag: string, value: string): string;
 
 // @public
-export type VariableScope = `party_${string}` | "system" | "custom";
+export type VariableScope = `party_${string}` | "system" | "custom" | "bareKey";
 
 // @public
 export class VersionConflictError extends DocCopError {
@@ -561,6 +612,9 @@ export const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/mai
 
 // @public
 export function wrap(archive: DocxArchive, loc: WrapLocation, spec: PlaceholderSpec): DocxArchive;
+
+// @public
+export function wrapBareKey(archive: DocxArchive, loc: WrapLocation, spec: BareKeyPlaceholderSpec): DocxArchive;
 
 // @public
 export function wrapBlock(archive: DocxArchive, opts: BlockWrapLocation, spec: PlaceholderSpec): DocxArchive;

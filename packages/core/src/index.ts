@@ -29,10 +29,35 @@ export { render as preview } from "./preview/HtmlRenderer.js";
 export type { RenderedHtml, AnchorMap, AnchorParagraph, AnchorSdt } from "./preview/types.js";
 
 // ─── placeholders subsystem ──────────────────────────────────────────────
-export { list, wrap, wrapBlock, unwrap, replace } from "./placeholders/PlaceholderEngine.js";
-export { decomposeTag, validateAlias } from "./placeholders/TagValidator.js";
+export {
+  list,
+  wrap,
+  wrapBareKey,
+  wrapBlock,
+  unwrap,
+  replace,
+} from "./placeholders/PlaceholderEngine.js";
+export type { ListOptions } from "./placeholders/PlaceholderEngine.js";
+export {
+  BARE_KEY_PATTERN,
+  decomposeTag,
+  validateAlias,
+  validateBareKey,
+} from "./placeholders/TagValidator.js";
 export type { DecomposedTag } from "./placeholders/TagValidator.js";
-export type { BlockWrapLocation, WrapLocation, PlaceholderSpec } from "./placeholders/types.js";
+export type {
+  BareKeyPlaceholderSpec,
+  BlockWrapLocation,
+  WrapLocation,
+  PlaceholderSpec,
+} from "./placeholders/types.js";
+export { compileTextTokens } from "./placeholders/TextTokenCompiler.js";
+export type {
+  CompileTextTokensOptions,
+  CompileTextTokensResult,
+  CompiledToken,
+  SkippedToken,
+} from "./placeholders/TextTokenCompiler.js";
 
 // ─── render subsystem ────────────────────────────────────────────────────
 export { render } from "./render/DocxRenderer.js";

@@ -248,4 +248,49 @@ describe("HtmlRenderer.render", () => {
     expect(result.anchors.paragraphs[0]?.sdts[0]?.indexInPara).toBe(1);
     expect(xml.length).toBeGreaterThan(0); // sanity
   });
+
+  it("data-run-index counts only <w:r>, not <w:sdt> (regression — agrees with wrap())", async () => {
+    // Build a paragraph where <w:sdt> precedes <w:r>. wrap() enumerates
+    // direct <w:r> children, so the plain run is at index 0. The
+    // preview must agree — earlier versions of HtmlRenderer incremented
+    // runIndex on the SDT branch too, producing data-run-index="1" on
+    // the only run, which made hosts pass invalid indices into wrap().
+    // See PlaceholderNotFoundError: "<paraId>/runs[1..1]" bug reports.
+    const xml = `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:p w14:paraId="C1C1C1C1">
+      <w:sdt>
+        <w:sdtPr><w:tag w:val="party_a.name"/><w:alias w:val="N"/></w:sdtPr>
+        <w:sdtContent><w:r><w:t>placeholder</w:t></w:r></w:sdtContent>
+      </w:sdt>
+      <w:r><w:t xml:space="preserve">plain</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>`;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const PizZip = require("pizzip");
+    const zip = new PizZip();
+    zip.file(
+      "[Content_Types].xml",
+      '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+    );
+    zip.file(
+      "_rels/.rels",
+      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>',
+    );
+    zip.file("word/document.xml", xml);
+    const bytes = zip.generate({ type: "uint8array" }) as Uint8Array;
+    const archive = parse(bytes);
+    ensureParaIds(archive);
+    const result = render(archive);
+    // The plain run must be data-run-index="0", not "1".
+    expect(result.html).toContain('<span class="doccop-run" data-run-index="0">');
+    expect(result.html).toContain("plain");
+    expect(result.html).not.toContain('data-run-index="1">plain');
+    // The SDT's anchor entry reports indexInPara = 0 (zero runs seen
+    // when the SDT was emitted).
+    expect(result.anchors.paragraphs[0]?.sdts[0]?.indexInPara).toBe(0);
+  });
 });

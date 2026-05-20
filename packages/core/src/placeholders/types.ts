@@ -67,6 +67,33 @@ export interface BlockWrapLocation {
 }
 
 /**
+ * Specification for a new bare-key placeholder. Used by `wrapBareKey`
+ * and `wrapBareKeyBlock` to author snippet content from a UI selection.
+ *
+ * Snippets carry bare-key SDTs (`<w:tag w:val="full_name">`) that the
+ * `RequisitesEngine` rewrites to scoped tags
+ * (`<w:tag w:val="party_a.full_name">`) at render time. Authoring tools
+ * that build a snippet editor use this spec; template editors (which
+ * author scoped placeholders directly) use `PlaceholderSpec` and call
+ * `wrap`.
+ *
+ * @since 0.2.0-beta.1
+ */
+export interface BareKeyPlaceholderSpec {
+  /**
+   * Bare key, e.g. `"full_name"`. Validated against `^[a-z][a-z0-9_]*$`
+   * — lowercase letters, digits, underscores; starts with a letter.
+   * Length 1..100. The dot character is forbidden (would make it look
+   * like a scoped tag).
+   */
+  key: string;
+  /** Friendly label shown in the preview and to snippet editors. */
+  alias: string;
+  /** Expected runtime type of the resolved value. */
+  dataType: DataType;
+}
+
+/**
  * Specification for a new placeholder. The engine validates `tag` and
  * `alias` then writes them into `<w:sdtPr>`. `dataType` is recorded in
  * the engine's Placeholder catalogue for runtime validation but is not

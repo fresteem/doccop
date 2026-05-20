@@ -5,7 +5,7 @@
   "description": "OSS document generation engine — .docx templating with visual placeholder editor and per-entity-subtype requisite blocks",
   "license": "MIT",
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "demo-app"],
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"

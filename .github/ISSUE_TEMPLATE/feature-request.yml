@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose a new feature or behaviour change
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature. Before opening: search existing issues — many ideas have been discussed.
+
+        **For breaking changes**, please describe the migration path you envision.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Lead with the host's pain, not the proposed implementation. The shape of the solution often becomes obvious once the problem is clear.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behaviour
+      description: Sketch the signature, the request/response shape, or the user flow.
+      render: typescript
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds that didn't fit, libraries that almost worked, etc.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where would this live?
+      options:
+        - "@doccop/core (engine logic)"
+        - "@doccop/server (HTTP / Fastify)"
+        - "@doccop/storage-postgres (reference stores)"
+        - "Documentation / examples"
+        - "Build / CI / tooling"
+        - "Other"
+    validations:
+      required: true
+  - type: checkboxes
+    id: breaking
+    attributes:
+      label: Is this a breaking change?
+      options:
+        - label: "Yes — existing hosts would need code changes"
+        - label: "No — purely additive"
+        - label: "Unsure"

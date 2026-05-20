@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta.1] - 2026-05-20
+
+### Added — snippet authoring APIs
+
+- **`compileTextTokens(archive, options?)`** in `@doccop/core` — converts
+  plain-text `{{key}}` tokens inside snippet `.docx` files into proper
+  bare-key SDT elements. Lets users author snippets in Word as plain
+  prose (no Developer tab, no Content Controls). Idempotent — running
+  it twice is a no-op. Options:
+    - `delimiters?: { open, close }` (default `{{` `}}`),
+    - `validateKey?: (key) => boolean` (default `BARE_KEY_PATTERN`),
+    - `onUnknownKey?: "ignore" | "warn" | "error"` (default `"ignore"`).
+  Returns `{ archive, compiled, skipped }`. End-to-end test exercises
+  `compileTextTokens → injectRequisites → render` to confirm authored
+  tokens flow through the full pipeline.
+- **`wrapBareKey(archive, location, spec)`** in `@doccop/core` — visual
+  counterpart of `wrap` for snippet editors. Spec is
+  `{ key, alias, dataType }` (no scope prefix). Emits
+  `<w:tag w:val="${key}">` with the same overlap/rPr-preservation/run-
+  splitting semantics as `wrap`.
+- **`list()` signature: optional third arg `{ includeBareKey?: boolean }`.**
+  Default `false` preserves pre-`0.2.0-beta.1` behaviour (template
+  editors don't see snippet-internal bare-key SDTs). When `true`, bare-
+  key SDTs surface with `scope: "bareKey"` and `key: tag`.
+- **`VariableScope` union** grows by `"bareKey"` literal. Used by
+  `list()` to discriminate bare-key entries from value/requisites ones.
+- **`BARE_KEY_PATTERN`** and **`validateBareKey(key)`** exported for
+  hosts that want to validate keys before calling the API.
+- **`BareKeyPlaceholderSpec`** type exported.
+
+### Fixed
+
+- **`HtmlRenderer` runIndex bug** — previously incremented `runIndex`
+  on both `<w:r>` and `<w:sdt>` branches, so a host that read
+  `data-run-index` from the preview and passed it back to `wrap()`
+  could trigger `PlaceholderNotFoundError: <paraId>/runs[1..1]` on
+  paragraphs that started with an SDT. Now `runIndex` counts only
+  `<w:r>` direct children, matching the engine's view via
+  `listDirectRuns(paragraph)`. SDT anchor entries keep `indexInPara`
+  reporting the run count at SDT emission time. Regression test added.
+- **`wrap()` error message** for out-of-range run indices is now
+  diagnostic: `<paraId> (run index N..M out of range; paragraph has K
+  run(s))` instead of the confusing `<paraId>/runs[N..M]` format that
+  read like a missing-placeholder lookup.
+
+### Added — documentation & demo
+
+- **`demo-app/`** — runnable end-to-end example as a workspace at the
+  repo root. CLI mode (`npm run cli`) builds a Ukrainian contract
+  template, renders it via the engine directly, writes `output.docx`.
+  Server mode (`npm run start`) boots Fastify with `@doccop/server`,
+  in-memory stores, sample resolvers, and an `x-user-id`-trusting
+  `AuthAdapter`. Includes curl examples for upload / wrap / render.
+  `typescript` + `tsx` are declared as workspace devDeps so the demo
+  builds without the repo-root install path.
+- **`docs/QUICKSTART.md` body** — 10-minute walkthrough from install to
+  first rendered document. Library-only path, no infrastructure.
+- **`docs/INTEGRATION.md` body** — adapter-by-adapter walkthrough with
+  working code samples (S3 storage, JWT auth, pino logger, Postgres
+  numbering, Fastify wire-up). Full `DocCopErrorCode → HTTP status`
+  table. i18n guidance. Migration patterns from docxtemplater /
+  Carbone. New "Authoring snippets via API" section covering
+  `compileTextTokens` and `wrapBareKey`.
+- **`docs/ARCHITECTURE.md` body** — internal design walkthrough covering
+  every subsystem (docx parsing, placeholder engine, preview, render
+  pipeline, requisites injection, server layer, Postgres reference)
+  plus cross-cutting concerns (errors, concurrency, observability,
+  versioning).
+- **`docs/RELEASE_PROCESS.md` body** — release channels, promotion
+  criteria, v1.0 stable checklist, version coordination rules,
+  deprecation policy, rollback procedure, release-day checklist.
+- **Per-package `README.md` + `LICENSE`** for `@doccop/core`,
+  `@doccop/server`, `@doccop/storage-postgres` — required for clean
+  npm publish (without these the packages show "no README" on
+  npmjs.com).
+- **`CODE_OF_CONDUCT.md`** — adopts Contributor Covenant 2.1 by
+  reference.
+- **`.github/ISSUE_TEMPLATE/`** (bug-report, feature-request, config)
+  and **`.github/PULL_REQUEST_TEMPLATE.md`** — structured contribution
+  intake.
+
+### Cleanups (no public-API impact)
+
+- Cleaned 14 `@throws {ErrorType}` JSDoc patterns to
+  `@throws ErrorType — …` form across `@doccop/core`. api-extractor's
+  `tsdocMessageReporting` silenced as defence-in-depth.
+- `routes/templates.ts` mutual-exclusion dispatcher between `wrap` and
+  `wrapBlock` simplified — final `else` throws a typed
+  `InvalidPlaceholderTagError` instead of returning the unmodified
+  archive (was a dead branch only reached when both `location` and
+  `blockRange` were absent).
+- `wrap` / `wrapBlock` internal refactor: shared `performInlineWrap`
+  helper so `wrapBareKey` reuses the run-splitting machinery without
+  duplication.
+
 ## [0.2.0-beta.0] - 2026-05-20
 
 ### Added

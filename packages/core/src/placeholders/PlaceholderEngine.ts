@@ -23,7 +23,7 @@ import {
 } from "../errors.js";
 import type { DataType, Placeholder } from "../types.js";
 import { buildSdt, getSdtContent } from "./SdtBuilder.js";
-import { decomposeTag, validateAlias } from "./TagValidator.js";
+import { BARE_KEY_PATTERN, decomposeTag, validateAlias, validateBareKey } from "./TagValidator.js";
 import {
   directChild,
   directChildren,
@@ -34,7 +34,28 @@ import {
   runText,
   splitSimpleRun,
 } from "./run-utils.js";
-import type { BlockWrapLocation, PlaceholderSpec, WrapLocation } from "./types.js";
+import type {
+  BareKeyPlaceholderSpec,
+  BlockWrapLocation,
+  PlaceholderSpec,
+  WrapLocation,
+} from "./types.js";
+
+/**
+ * Options accepted by `list()`. Default behaviour (no options) returns
+ * value placeholders and requisites markers only — the surface a
+ * template editor needs. Pass `{ includeBareKey: true }` when scanning
+ * snippet documents whose tags are bare keys (`<w:tag w:val="full_name">`).
+ */
+export interface ListOptions {
+  /**
+   * When true, SDTs whose tag matches `BARE_KEY_PATTERN`
+   * (`^[a-z][a-z0-9_]*$`) are surfaced with `scope: "bareKey"`.
+   * Default `false` — preserves pre-`0.2.0-beta.1` behaviour for
+   * existing template-editor integrations.
+   */
+  includeBareKey?: boolean;
+}
 
 // ─── list ──────────────────────────────────────────────────────────────────
 
@@ -53,6 +74,7 @@ import type { BlockWrapLocation, PlaceholderSpec, WrapLocation } from "./types.j
 export function list(
   archive: DocxArchive,
   dataTypes: ReadonlyMap<string, DataType> = new Map(),
+  options: ListOptions = {},
 ): Placeholder[] {
   const out: Placeholder[] = [];
   // Find every <w:sdt> in document order. xmldom's
@@ -71,8 +93,22 @@ export function list(
     try {
       decomposed = decomposeTag(tag);
     } catch {
-      // Tag in the document doesn't match our format — skip it. The
-      // engine's catalogue only tracks well-formed tags.
+      // Tag doesn't match value/requisites format. If the caller opted
+      // into bare-key surfacing AND the tag matches BARE_KEY_PATTERN,
+      // emit a synthetic placeholder with scope="bareKey". Otherwise
+      // skip — the engine's catalogue only tracks tags it can resolve.
+      if (options.includeBareKey === true && BARE_KEY_PATTERN.test(tag)) {
+        const paraId = findEnclosingParaId(sdt);
+        if (!paraId) continue;
+        out.push({
+          tag,
+          alias,
+          scope: "bareKey",
+          key: tag,
+          dataType: dataTypes.get(tag) ?? "text",
+          paraId,
+        });
+      }
       continue;
     }
 
@@ -153,6 +189,55 @@ export function wrap(archive: DocxArchive, loc: WrapLocation, spec: PlaceholderS
   // tag turns out to be invalid.
   decomposeTag(spec.tag);
   validateAlias(spec.tag, spec.alias);
+  return performInlineWrap(archive, loc, spec.tag, spec.alias);
+}
+
+// ─── wrapBareKey (since 0.2.0-beta.1) ──────────────────────────────────────
+
+/**
+ * Wrap an inline selection as a BARE-KEY placeholder — used by snippet
+ * editors. The resulting SDT carries `<w:tag w:val="${spec.key}">`
+ * (no scope, no dot). At render time, `RequisitesEngine.TagRewriter`
+ * rewrites the tag to `party_X.${spec.key}` based on the receiving
+ * party.
+ *
+ * Same overlap / range / rPr-preservation semantics as `wrap`. The only
+ * difference is the validation rule (bare key, no dot) and the absence
+ * of a scope prefix in the emitted tag.
+ *
+ * @throws InvalidPlaceholderTagError — when `spec.key` fails
+ *   `BARE_KEY_PATTERN` (uppercase, dots, dashes all reject) or
+ *   `spec.alias` is malformed.
+ * @throws PlaceholderNotFoundError — if `loc.paraId` or the run indices
+ *   are unknown.
+ * @throws OverlappingPlaceholderError — if the selection crosses an
+ *   existing SDT.
+ * @throws Error for complex-run mid-text splits — same as `wrap`.
+ *
+ * @since 0.2.0-beta.1
+ */
+export function wrapBareKey(
+  archive: DocxArchive,
+  loc: WrapLocation,
+  spec: BareKeyPlaceholderSpec,
+): DocxArchive {
+  validateBareKey(spec.key);
+  validateAlias(spec.key, spec.alias);
+  return performInlineWrap(archive, loc, spec.key, spec.alias);
+}
+
+/**
+ * Internal: the body of `wrap` after tag validation, parameterised by
+ * the final tag / alias strings. Used by both `wrap` (scoped tags) and
+ * `wrapBareKey` (bare-key tags) so they share the splitting +
+ * overlap-guard + SDT-construction logic.
+ */
+function performInlineWrap(
+  archive: DocxArchive,
+  loc: WrapLocation,
+  tag: string,
+  alias: string,
+): DocxArchive {
   validateRange(loc);
 
   const cloned = cloneArchive(archive);
@@ -171,8 +256,12 @@ export function wrap(archive: DocxArchive, loc: WrapLocation, spec: PlaceholderS
   const startRun = runs[loc.startRunIndex];
   const endRun = runs[loc.endRunIndex];
   if (!startRun || !endRun) {
+    // Diagnostic-rich message: hosts hitting this most commonly read
+    // `data-run-index` from the HTML preview and pass it back here;
+    // a mismatch between preview indexing and engine indexing surfaces
+    // exactly here. Tell them what the engine sees so they can debug.
     throw new PlaceholderNotFoundError(
-      `${loc.paraId}/runs[${loc.startRunIndex}..${loc.endRunIndex}]`,
+      `${loc.paraId} (run index ${loc.startRunIndex}..${loc.endRunIndex} out of range; paragraph has ${runs.length} run(s))`,
     );
   }
 
@@ -198,7 +287,7 @@ export function wrap(archive: DocxArchive, loc: WrapLocation, spec: PlaceholderS
   const toWrap = performSplits(paragraph, runs, loc, startRun, endRun);
 
   // Build the SDT and move the collected runs into its content.
-  const sdt = buildSdt(cloned.document, { tag: spec.tag, alias: spec.alias });
+  const sdt = buildSdt(cloned.document, { tag, alias });
   const sdtContent = getSdtContent(sdt);
 
   // Insert SDT before the first run we're about to wrap.

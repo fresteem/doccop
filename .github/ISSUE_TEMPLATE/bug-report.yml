@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a defect in @doccop/core, @doccop/server, or @doccop/storage-postgres
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more concrete the repro, the faster the fix.
+
+        **Do not file security vulnerabilities here.** Report via [GitHub Security Advisories](https://github.com/fresteem/doccop/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: doccop version
+      description: Output of `npm ls @doccop/core`. Include all `@doccop/*` packages and their versions.
+      placeholder: "@doccop/core@0.2.0, @doccop/server@0.2.0"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: Output of `node -v`.
+      placeholder: "v20.11.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Which package?
+      multiple: true
+      options:
+        - "@doccop/core"
+        - "@doccop/server"
+        - "@doccop/storage-postgres"
+        - "Other / not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the unexpected behaviour.
+      placeholder: When I call wrap() with X, the engine throws Y instead of returning Z.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        Code, fixture, or steps. The smaller the better.
+        If the bug involves a specific `.docx` file, attach it (drag into this textarea) — strip PII first.
+      render: typescript
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Stack trace (if any)
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Adapter implementations, host stack, anything that might be relevant.

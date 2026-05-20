@@ -111,6 +111,13 @@ function renderParagraph(p: Element, ctx: RenderContext): void {
   ctx.out.push(`<p class="doccop-para"${anchorAttr}${styleAttr}>`);
 
   const sdtsInPara: AnchorSdt[] = [];
+  // `runIndex` mirrors the engine's view: it counts ONLY direct `<w:r>`
+  // children. SDTs are anchored by their position relative to that run
+  // sequence (`indexInPara` captures the run count at that point) but
+  // do NOT consume a run index themselves. This matches what
+  // `PlaceholderEngine.wrap` sees via `listDirectRuns(paragraph)`, so
+  // host UIs that pass `data-run-index` back into a `WrapLocation`
+  // address the same element the engine will split.
   let runIndex = 0;
   for (const child of directChildren(p)) {
     if (child.namespaceURI !== W_NS) continue;
@@ -124,7 +131,7 @@ function renderParagraph(p: Element, ctx: RenderContext): void {
         if (sdt) {
           sdtsInPara.push({ ...sdt, indexInPara: runIndex, block: false });
         }
-        runIndex++;
+        // Intentionally NOT bumping runIndex — see comment above.
         break;
       }
       // pPr, bookmarkStart, etc. — non-content, skip.

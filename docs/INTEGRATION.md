@@ -253,6 +253,84 @@ function translateError(code: DocCopErrorCode, details: Record<string, unknown>)
 - **Postgres pool:** the Drizzle stores use whatever pool you wire in. For burst traffic, size `maxConnections` ≥ `maxConcurrentRendersPerUser × maxConcurrentUsers`.
 - **Health checks:** doccop is stateless within the engine; the host's `/health` should check storage + DB + auth provider connectivity.
 
+## Authoring snippets via API
+
+Snippet documents (`requisites:party_X` body content) traditionally require Word's Developer tab + Content Controls — too much friction for most legal-ops users. Since **0.2.0-beta.1** there are two API paths that let host applications offer snippet authoring without that friction.
+
+### Path 1: plain-text tokens (`compileTextTokens`)
+
+Users type `{{key}}` as plain text in Word, upload the `.docx`, and the host calls `compileTextTokens` to convert each token into a bare-key SDT before persisting:
+
+```typescript
+import { compileTextTokens, ensureParaIds, parse, serialize } from "@doccop/core";
+
+async function ingestSnippet(uploadedBytes: Uint8Array): Promise<Uint8Array> {
+  const archive = parse(uploadedBytes);
+  ensureParaIds(archive);
+
+  const { archive: compiled, compiled: tokens, skipped } = compileTextTokens(archive);
+  // tokens = [{ key: "full_name", paraId: "...", paragraphIndex: 0 }, ...]
+  // skipped = [{ raw: "{{Bad-Key}}", reason: "invalid-key" }, ...] when the
+  // default validateKey rejected something.
+
+  if (skipped.length > 0) {
+    // Surface to the user — they probably meant something but typed it wrong.
+  }
+
+  return serialize(compiled);  // persist via your StorageAdapter
+}
+```
+
+Defaults: delimiters `{{` `}}`, key pattern `^[a-z][a-z0-9_]*$`, unknown keys ignored (left as plain text). Options:
+
+```typescript
+compileTextTokens(archive, {
+  delimiters: { open: "<<", close: ">>" },     // alternative markers
+  validateKey: (k) => myAllowedKeys.has(k),    // host-defined allow-list
+  onUnknownKey: "error",                       // throw instead of leaving plain text
+});
+```
+
+The function is **idempotent** — running it twice on the same archive is a no-op (tokens already inside SDTs are invisible to the scanner).
+
+### Path 2: visual editor (`wrapBareKey`)
+
+For hosts that ship their own visual snippet editor (analogous to the template editor), `wrapBareKey` mirrors `wrap` but emits a bare-key tag:
+
+```typescript
+import { wrapBareKey } from "@doccop/core";
+import type { BareKeyPlaceholderSpec, WrapLocation } from "@doccop/core";
+
+const loc: WrapLocation = {
+  paraId: "AAAA0001",
+  startRunIndex: 0,
+  startOffset: 7,
+  endRunIndex: 0,
+  endOffset: 16,
+};
+const spec: BareKeyPlaceholderSpec = {
+  key: "edrpou",
+  alias: "EDRPOU",
+  dataType: "edrpou",
+};
+const next = wrapBareKey(archive, loc, spec);
+```
+
+The host's editor reads `data-run-index` + character offsets from the rendered HTML preview, the same way the template editor does. The only difference is the spec shape — `{ key, alias, dataType }` instead of `{ tag, alias, dataType }`.
+
+### Surfacing bare keys in `list()`
+
+`list()` hides bare-key SDTs by default so template-editor integrations don't see snippet-internal placeholders. Pass `{ includeBareKey: true }` when scanning snippet documents:
+
+```typescript
+const tags = list(snippetArchive, dataTypes, { includeBareKey: true });
+// → [{ tag: "full_name", scope: "bareKey", key: "full_name", ... }, ...]
+```
+
+### How render time uses them
+
+Bare-key SDTs only make sense inside snippets — at render time `RequisitesEngine.TagRewriter` rewrites each `<w:tag w:val="key">` to `<w:tag w:val="party_X.key">` based on which party slot the snippet was injected for. After rewriting, the downstream `DocxRenderer` substitutes values through the regular `EntityResolver` for `party_X`. Hosts don't need to do anything extra — just author the snippet (via either path above), register it via `SnippetStore.upsert`, and run a regular render.
+
 ## Migration from existing systems
 
 - **From docxtemplater:** placeholders use `{{tag}}` syntax in docxtemplater; doccop uses `<w:sdt>` content controls. Migration script: parse old template, find each `{{tag}}` text run, call `wrap()` with appropriate `WrapLocation`. The engine refuses overlapping wraps so you can re-run idempotently.

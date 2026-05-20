@@ -43,8 +43,16 @@ export type EntitySubtype = string;
  * Scope of a variable in a template. The engine treats `party_a`, `party_b`,
  * `party_c` … as N-th party slots and `system` as render-time computed
  * values (date, contract number, etc.).
+ *
+ * `"bareKey"` (since 0.2.0-beta.1) is a synthetic scope used by `list()`
+ * when surfacing bare-key SDTs from snippet documents — those tags have
+ * no scope prefix in the OOXML, so a discriminant is provided here for
+ * host UIs that want to filter on placeholder kind. `wrapBareKey`
+ * creates such SDTs with `<w:tag w:val="key">` (no scope, no dot);
+ * `RequisitesEngine.TagRewriter` rewrites them to scoped form at
+ * render time based on the target party slot.
  */
-export type VariableScope = `party_${string}` | "system" | "custom";
+export type VariableScope = `party_${string}` | "system" | "custom" | "bareKey";
 
 /**
  * Reference to a party in a generation request — which entity fills the

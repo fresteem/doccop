@@ -42,6 +42,10 @@
     {
       "include": ["**/test/**", "**/*.test.ts"],
       "linter": { "rules": { "complexity": { "useLiteralKeys": "off" } } }
+    },
+    {
+      "include": ["demo-app/**"],
+      "linter": { "rules": { "suspicious": { "noConsoleLog": "off" } } }
     }
   ],
   "javascript": {

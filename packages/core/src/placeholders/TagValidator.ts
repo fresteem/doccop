@@ -31,6 +31,15 @@ const VALUE_TAG_PATTERN = /^([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)$/;
 /** Matches `requisites:<party_slot>` block tags. */
 const REQUISITES_TAG_PATTERN = /^requisites:(party_[a-z0-9_]+)$/;
 
+/**
+ * Matches a bare-key snippet tag — no scope prefix, no dot. Used by
+ * `wrapBareKey` and by `list()` when surfacing bare-key SDTs in snippet
+ * documents.
+ *
+ * @since 0.2.0-beta.1
+ */
+export const BARE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
+
 /** Structured decomposition of a validated tag. */
 export type DecomposedTag =
   | { kind: "value"; tag: string; scope: VariableScope; key: string }
@@ -78,6 +87,34 @@ export function decomposeTag(tag: string): DecomposedTag {
     tag,
     "tag must be `<scope>.<key>` (scope = party_<id> | system | custom) or `requisites:party_<id>`",
   );
+}
+
+/**
+ * Validate a bare-key string against `BARE_KEY_PATTERN`. Used by
+ * `wrapBareKey` / `wrapBareKeyBlock` before they emit the
+ * `<w:tag w:val="key">` element.
+ *
+ * @throws InvalidPlaceholderTagError — when empty, too long, or fails
+ *   the pattern (uppercase letters, dots, special characters all reject).
+ *
+ * @since 0.2.0-beta.1
+ */
+export function validateBareKey(key: string): void {
+  if (!key) {
+    throw new InvalidPlaceholderTagError(key, "bare key must not be empty");
+  }
+  if (key.length > MAX_TAG_LENGTH) {
+    throw new InvalidPlaceholderTagError(
+      key,
+      `bare key length ${key.length} exceeds limit ${MAX_TAG_LENGTH}`,
+    );
+  }
+  if (!BARE_KEY_PATTERN.test(key)) {
+    throw new InvalidPlaceholderTagError(
+      key,
+      "bare key must match ^[a-z][a-z0-9_]*$ — lowercase letters, digits, underscores; starts with a letter; no dots",
+    );
+  }
 }
 
 /**
