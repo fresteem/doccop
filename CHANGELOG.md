@@ -105,3 +105,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     surfaces SDTs regardless of authored paraId format.
   - Image rels remain a v2 extension point (snippets are text-only by
     convention).
+- Wave 7: `@doccop/server` — Fastify plugin exposing `/v1/*` routes.
+  - `doccopRoutes` plugin registers under the host's chosen prefix;
+    plugins own auth (via configured AuthAdapter), error mapping,
+    rate limiting, and idempotency.
+  - `POST /v1/templates` — multipart upload .docx, parses + normalises
+    via `parse`/`ensureParaIds`/`serialize`, creates v1 record.
+  - `GET /v1/templates`, `GET /v1/templates/:id`.
+  - `GET /v1/templates/:id/preview` — HTML preview via `preview()`.
+  - `POST /v1/templates/:id/placeholders` — `wrap` with optimistic
+    locking against `expectedVersionId`, creates new version.
+  - `DELETE /v1/templates/:id/placeholders/:tag` — `unwrap`.
+  - `POST /v1/snippets` — admin-only upload, upserts by (entityType,
+    entitySubtype), bumps version.
+  - `GET /v1/snippets`, `DELETE /v1/snippets/:id`.
+  - `POST /v1/documents` — render with Idempotency-Key support
+    (returns cached on repeat), rate-limited per user.
+  - `GET /v1/documents`, `GET /v1/documents/:id` — own-only.
+  - Zod schemas for every request body + param.
+  - `DocCopError` → HTTP status mapping covers all 19 engine error
+    codes (4xx for input issues, 5xx for storage/render failures).
+  - `InMemoryRateLimiter` enforces concurrent + per-minute limits per
+    user (defaults 5 concurrent / 60 per minute).
+  - Storage interfaces split into `StorageAdapter` (blobs, from core),
+    `TemplateStore`, `TemplateVersionStore`, `SnippetStore`,
+    `SnippetVersionStore`, `DocumentStore`, `IdempotencyStore`,
+    `DataTypeRegistry` — hosts implement each against their DB.
+  - In-memory reference impls live under `test/helpers.ts` (~250 LoC),
+    used by the integration tests and serve as a template for hosts.
+- Dependencies added (all MIT):
+  - fastify@5.2.1, @fastify/multipart@9.0.3, zod@3.24.1.
+- Exposed engine surface: re-exports `parse` / `serialize` /
+  `ensureParaIds` / `list` / `wrap` / `unwrap` / `replace` / `render` /
+  `preview` from `@doccop/core` main barrel (was Wave 1-6 only types
+  before).
