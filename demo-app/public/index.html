@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>doccop demo</title>
+    <style>
+      :root {
+        --fg: #1a1a1a;
+        --bg: #fafafa;
+        --accent: #2563eb;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --ok: #16a34a;
+        --warn: #d97706;
+        --err: #dc2626;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+        line-height: 1.5;
+      }
+      header {
+        padding: 24px 32px;
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 { margin: 0; font-size: 22px; }
+      header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 32px;
+        display: grid;
+        gap: 24px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+      }
+      .card h2 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .card p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+      label { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 500; }
+      select, input[type="text"] {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+        background: #fff;
+      }
+      button {
+        background: var(--accent);
+        color: #fff;
+        border: 0;
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        margin-top: 12px;
+      }
+      button:disabled { background: var(--muted); cursor: not-allowed; }
+      button.secondary {
+        background: #fff;
+        color: var(--fg);
+        border: 1px solid var(--border);
+      }
+      .status {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        white-space: pre-wrap;
+        display: none;
+      }
+      .status.ok { display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: var(--ok); }
+      .status.warn { display: block; background: #fffbeb; border: 1px solid #fde68a; color: var(--warn); }
+      .status.err { display: block; background: #fef2f2; border: 1px solid #fecaca; color: var(--err); }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      a.download {
+        display: inline-block;
+        margin-top: 12px;
+        color: var(--accent);
+        font-weight: 500;
+        text-decoration: none;
+      }
+      a.download:hover { text-decoration: underline; }
+      footer {
+        max-width: 920px;
+        margin: 16px auto 32px;
+        padding: 0 32px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .placeholder-list {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--muted);
+        background: var(--bg);
+        padding: 12px;
+        border-radius: 6px;
+        max-height: 200px;
+        overflow: auto;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 500;
+        background: #eff6ff;
+        color: var(--accent);
+        border-radius: 999px;
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>doccop demo</h1>
+      <p>End-to-end snippet of the document-generation pipeline. Powered by <code>@doccop/server</code> + in-memory stores. <span class="pill">demo only — no persistence</span></p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>1 · Quick demo</h2>
+        <p>Click below to build a Ukrainian contract template, render it with sample party data, and download the result. No upload needed — the demo carries a built-in template.</p>
+
+        <div class="row">
+          <div>
+            <label for="partyA">Party A (your organisation)</label>
+            <select id="partyA">
+              <option value="internal-acme">ТОВ «ACME Україна» (TOV)</option>
+            </select>
+          </div>
+          <div>
+            <label for="partyB">Party B (counterparty)</label>
+            <select id="partyB">
+              <option value="external-clientx">ФОП Петренко (FOP)</option>
+              <option value="external-tov">ТОВ «Промінь» (TOV)</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="quickDemoBtn">Generate contract</button>
+        <div id="quickStatus" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>2 · Inspect the template</h2>
+        <p>The placeholders the engine will resolve at render time. These come from the in-memory contract template (<code>demo-app/src/template.ts</code>).</p>
+        <button id="inspectBtn" class="secondary">Show placeholders</button>
+        <div id="placeholders" class="placeholder-list" style="display: none;"></div>
+      </section>
+
+      <section class="card">
+        <h2>3 · Server health</h2>
+        <p>Hits <code>GET /health</code>. Confirms the Fastify process and the doccop plugin are alive.</p>
+        <button id="healthBtn" class="secondary">Ping /health</button>
+        <div id="healthStatus" class="status"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        See <a href="https://github.com/fresteem/doccop/blob/main/docs/QUICKSTART.md">QUICKSTART.md</a> for the library-only path, or
+        <a href="https://github.com/fresteem/doccop/blob/main/docs/INTEGRATION.md">INTEGRATION.md</a> for the full host-integration walkthrough.
+      </p>
+    </footer>
+
+    <script type="module">
+      const AUTH = { "x-user-id": "demo-user" };
+
+      function setStatus(el, kind, text) {
+        el.className = `status ${kind}`;
+        el.textContent = text;
+      }
+
+      function renderDownloadResult(el, payload) {
+        // Build node tree explicitly — never use innerHTML with server data.
+        el.className = "status ok";
+        el.textContent = "";
+        const lines = [
+          `✓ rendered in ${payload.durationMs}ms`,
+          `✓ contract number: ${payload.documentNumber}`,
+          `✓ warnings: ${payload.warnings.length}`,
+          "",
+          "Resolved values (audit trail):",
+          ...Object.entries(payload.resolvedValues).map(([k, v]) => `  ${k} = "${v}"`),
+          "",
+        ];
+        el.appendChild(document.createTextNode(lines.join("\n")));
+        const link = document.createElement("a");
+        link.className = "download";
+        link.href = payload.downloadUrl;
+        link.setAttribute("download", payload.filename);
+        link.textContent = `↓ Download ${payload.filename}`;
+        el.appendChild(link);
+      }
+
+      document.getElementById("quickDemoBtn").addEventListener("click", async () => {
+        const btn = document.getElementById("quickDemoBtn");
+        const statusEl = document.getElementById("quickStatus");
+        btn.disabled = true;
+        setStatus(statusEl, "warn", "Generating…");
+        try {
+          const partyA = document.getElementById("partyA").value;
+          const partyB = document.getElementById("partyB").value;
+          const res = await fetch("/api/quick-demo", {
+            method: "POST",
+            headers: { ...AUTH, "Content-Type": "application/json" },
+            body: JSON.stringify({ partyA, partyB }),
+          });
+          if (!res.ok) {
+            const err = await res.text();
+            setStatus(statusEl, "err", `HTTP ${res.status}: ${err}`);
+            return;
+          }
+          renderDownloadResult(statusEl, await res.json());
+        } catch (e) {
+          setStatus(statusEl, "err", `Network error: ${e.message}`);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      document.getElementById("inspectBtn").addEventListener("click", async () => {
+        const out = document.getElementById("placeholders");
+        out.style.display = "block";
+        out.textContent = "Loading…";
+        try {
+          const res = await fetch("/api/template-info", { headers: AUTH });
+          if (!res.ok) {
+            out.textContent = `HTTP ${res.status}`;
+            return;
+          }
+          const data = await res.json();
+          out.textContent = data.placeholders
+            .map((p) => `${p.tag.padEnd(30, " ")}  ${p.alias}`)
+            .join("\n");
+        } catch (e) {
+          out.textContent = `Error: ${e.message}`;
+        }
+      });
+
+      document.getElementById("healthBtn").addEventListener("click", async () => {
+        const out = document.getElementById("healthStatus");
+        try {
+          const res = await fetch("/health");
+          const data = await res.json();
+          setStatus(out, "ok", JSON.stringify(data, null, 2));
+        } catch (e) {
+          setStatus(out, "err", `Network error: ${e.message}`);
+        }
+      });
+    </script>
+  </body>
+</html>

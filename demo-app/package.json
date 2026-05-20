@@ -2,24 +2,25 @@
   "name": "doccop-demo-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Runnable end-to-end demo for doccop — CLI mode renders a Ukrainian contract; server mode boots Fastify + in-memory stores",
+  "description": "Runnable end-to-end demo for doccop — CLI mode renders a Ukrainian contract; server mode boots Fastify + browser UI + in-memory stores",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "cli": "node --enable-source-maps dist/cli.js",
     "start": "node --enable-source-maps dist/server.js",
+    "dev": "tsx watch src/server.ts",
     "dev:cli": "tsx src/cli.ts",
-    "dev:server": "tsx src/server.ts",
     "test": "node -e \"console.log('demo-app has no automated tests; run npm run cli to exercise it')\""
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@doccop/core": "0.2.0",
-    "@doccop/server": "0.2.0",
+    "@doccop/core": "*",
+    "@doccop/server": "*",
     "@fastify/multipart": "9.0.3",
+    "@fastify/static": "8.0.4",
     "fastify": "5.2.1"
   },
   "devDependencies": {

@@ -1,9 +1,10 @@
 # doccop demo-app
 
-A runnable end-to-end example showing how to integrate `@doccop/core` and `@doccop/server` into a host application. Self-contained — no Postgres, no S3, no external services. Two modes:
+A runnable end-to-end example showing how to integrate `@doccop/core` and `@doccop/server` into a host application. Self-contained — no Postgres, no S3, no external services. Three modes:
 
-- **CLI mode** — builds a Ukrainian contract template in-memory, runs the engine library directly, writes the result to `output.docx`.
-- **Server mode** — boots Fastify with all `/v1/*` routes wired against in-memory stores; curl-able for integration testing.
+- **CLI mode** (`npm run cli`) — builds a Ukrainian contract template in-memory, renders it through the engine, writes `output.docx`. Smallest possible library-only integration.
+- **Server mode** (`npm run start` / `npm run dev`) — boots Fastify with all `/v1/*` routes wired against in-memory stores. Includes a **browser UI** at `http://localhost:3000/` with one-click contract generation, a placeholder inspector, and a health probe. `npm run dev` is the same but with `tsx watch` for hot reload during development.
+- **HTTP integration testing** — curl the `/v1/*` endpoints directly. Examples below.
 
 ## Setup
 
@@ -66,16 +67,34 @@ Open output.docx in Microsoft Word to see the substituted contract.
 
 `output.docx` is written to `demo-app/output.docx`. Open it in Word — every placeholder has been substituted, the SDT wrappers are gone (or rather, their content was replaced), and the document opens cleanly.
 
-## Server mode
+## Server mode + browser UI
+
+From the repo root:
 
 ```bash
 npm run start --workspace=doccop-demo-app
+# or, with hot reload:
+npm run dev --workspace=doccop-demo-app
 ```
 
-Boots Fastify on `http://127.0.0.1:3000`. To pick a different port:
+Or from inside `demo-app/`:
 
 ```bash
-PORT=4000 HOST=0.0.0.0 npm run start --workspace=doccop-demo-app
+npm run start
+# or, with tsx watch + hot reload on src/ changes:
+npm run dev
+```
+
+Then **open <http://localhost:3000/> in a browser**. The UI has three sections:
+
+1. **Quick demo** — pick a Party A and a Party B from the dropdowns, click "Generate contract". The server builds the in-memory template, renders it through the engine, and returns a download link. Open the resulting `.docx` in Word.
+2. **Inspect the template** — lists every placeholder the engine will resolve (tags, aliases, scopes, data types). Comes from `demo-app/src/template.ts`.
+3. **Server health** — hits `GET /health` to confirm the process is up.
+
+To pick a different port:
+
+```bash
+PORT=4000 HOST=0.0.0.0 npm run start
 ```
 
 ### Try the endpoints (curl)
