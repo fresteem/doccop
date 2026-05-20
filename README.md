@@ -27,7 +27,41 @@ doccop is a database-agnostic, framework-agnostic engine for generating `.docx` 
 
 ## Quickstart
 
-_Coming in Wave 13 — packaging + docs._
+```bash
+npm install @doccop/core @doccop/server @doccop/storage-postgres
+```
+
+Minimal in-process render — no HTTP, no DB:
+
+```typescript
+import { parse, render } from "@doccop/core";
+import type { EntityResolver, RenderConfig, RenderRequest } from "@doccop/core";
+
+const partyA: EntityResolver = {
+  scope: "party_a",
+  async resolve(key) {
+    if (key === "full_name") return { kind: "text", value: "ACME Ltd" };
+    return { kind: "absent" };
+  },
+};
+
+const template = parse(fs.readFileSync("contract-template.docx"));
+const result = await render(template, /* RenderRequest */ {
+  userId: "u1", templateId: "t1", templateVersionId: "v1",
+  templateCategory: null, documentNumber: "001/2026",
+  parties: [{ role: "party_a", entityType: "organization", entityId: "acme" }],
+  now: new Date(),
+}, /* RenderConfig */ { resolvers: [partyA] });
+
+fs.writeFileSync("contract.docx", result.docx);
+```
+
+Full walkthroughs:
+
+- [`docs/QUICKSTART.md`](./docs/QUICKSTART.md) — install → first render in ten minutes.
+- [`docs/INTEGRATION.md`](./docs/INTEGRATION.md) — wire `@doccop/server` into a Fastify host with stores, auth, storage.
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — internal design, two-phase render, requisites pipeline.
+- [`docs/RELEASE_PROCESS.md`](./docs/RELEASE_PROCESS.md) — versioning, support matrix, deprecation policy.
 
 ## Repo layout
 

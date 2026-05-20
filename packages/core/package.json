@@ -1,6 +1,6 @@
 {
   "name": "@doccop/core",
-  "version": "0.2.0-alpha.0",
+  "version": "0.2.0-beta.0",
   "description": "Core engine for doccop document generation — docx parsing, SDT placeholder manipulation, variable resolution, requisites injection",
   "license": "MIT",
   "type": "module",

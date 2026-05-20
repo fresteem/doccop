@@ -511,7 +511,11 @@ describe("wrapBlock", () => {
     ).toThrow(PlaceholderNotFoundError);
   });
 
-  it("rejects when range crosses an existing block SDT", () => {
+  it("rejects nesting inside an existing requisites:* SDT with OverlappingPlaceholderError", () => {
+    // Fixture body: <p:50000001> <p:50000003> <sdt requisites:party_a>(p:50000002)</sdt>
+    // Wrap range pointing at the paragraph inside the existing
+    // requisites:* SDT must be refused — nesting requisites in
+    // requisites is forbidden (RequisitesEngine cannot render it).
     const archive = setup({
       paragraphs: [
         { text: "Before", paraId: "50000001" },
@@ -523,25 +527,13 @@ describe("wrapBlock", () => {
         paragraphs: [{ text: "Inner", paraId: "50000002" }],
       },
     });
-    // The fixture renders: <p:50000001><p:50000002 inside sdt><sdt: requisites:party_a><p:50000003>
-    // Wait — the fixture appends the blockSdt AFTER paragraphs. So body is:
-    //   <p:50000001> <p:50000003> <sdt>(inner)</sdt>
-    // The existing block SDT sits AFTER both visible paragraphs. To
-    // produce a crossing, wrap a range that ends past the SDT.
-    // Since the fixture forces this ordering, the practical overlap
-    // scenario is: range [50000001 .. some-id-after-sdt]. We don't have
-    // such an id available, so the overlap test is best exercised by
-    // ranging across the SDT explicitly: start before, end after.
-    // For now we assert that a range entirely AFTER the SDT (start =
-    // end = a paraId inside the SDT) hits the "not under <w:body>" branch
-    // because that paragraph's parent is sdtContent.
     expect(() =>
       wrapBlock(
         archive,
         { startParaId: "50000002", endParaId: "50000002" },
         { tag: "requisites:party_b", alias: "New", dataType: "text" },
       ),
-    ).toThrow(/<w:body>/);
+    ).toThrow(OverlappingPlaceholderError);
   });
 
   it("survives serialize → parse round-trip via list()", () => {
@@ -711,3 +703,150 @@ function parseDocXmlIntoFixture(xml: string): ReturnType<typeof parse> {
   ensureParaIds(archive);
   return archive;
 }
+
+describe("wrapBlock — non-body containers", () => {
+  it("wraps a single paragraph inside a one-cell table; SDT lives inside <w:tc>", () => {
+    const xml = `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="5000" w:type="dxa"/></w:tcPr>
+          <w:p w14:paraId="C1000001"><w:r><w:t>Cell para</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>
+    </w:tbl>
+  </w:body>
+</w:document>`;
+    const archive = parseDocXmlIntoFixture(xml);
+    const next = wrapBlock(
+      archive,
+      { startParaId: "C1000001", endParaId: "C1000001" },
+      { tag: "requisites:party_a", alias: "R", dataType: "text" },
+    );
+    // Exactly one SDT in the document and it lives inside <w:tc>, not <w:body>.
+    const sdts = findElements(next.document, W_NS, "sdt");
+    expect(sdts).toHaveLength(1);
+    const sdt = sdts[0] as Element;
+    const parent = sdt.parentNode as Element | null;
+    expect(parent).not.toBeNull();
+    expect(parent?.localName).toBe("tc");
+  });
+
+  it("wraps two adjacent paragraphs inside the same <w:tc>", () => {
+    const xml = `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="5000" w:type="dxa"/></w:tcPr>
+          <w:p w14:paraId="C2000001"><w:r><w:t>Cell para A</w:t></w:r></w:p>
+          <w:p w14:paraId="C2000002"><w:r><w:t>Cell para B</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>
+    </w:tbl>
+  </w:body>
+</w:document>`;
+    const archive = parseDocXmlIntoFixture(xml);
+    const next = wrapBlock(
+      archive,
+      { startParaId: "C2000001", endParaId: "C2000002" },
+      { tag: "requisites:party_a", alias: "R", dataType: "text" },
+    );
+    const sdts = findElements(next.document, W_NS, "sdt");
+    expect(sdts).toHaveLength(1);
+    const sdt = sdts[0] as Element;
+    // Both paragraphs are now under sdtContent, and the SDT is in <w:tc>.
+    expect((sdt.parentNode as Element).localName).toBe("tc");
+    const innerParas = findElements(sdt, W_NS, "p");
+    expect(innerParas).toHaveLength(2);
+  });
+
+  it("rejects paragraphs that sit in DIFFERENT cells (same-parent rule)", () => {
+    const xml = `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="2500"/><w:gridCol w:w="2500"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="2500" w:type="dxa"/></w:tcPr>
+          <w:p w14:paraId="C3000001"><w:r><w:t>Cell A</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="2500" w:type="dxa"/></w:tcPr>
+          <w:p w14:paraId="C3000002"><w:r><w:t>Cell B</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>
+    </w:tbl>
+  </w:body>
+</w:document>`;
+    const archive = parseDocXmlIntoFixture(xml);
+    expect(() =>
+      wrapBlock(
+        archive,
+        { startParaId: "C3000001", endParaId: "C3000002" },
+        { tag: "requisites:party_a", alias: "R", dataType: "text" },
+      ),
+    ).toThrow(/must share the same parent/);
+  });
+
+  it("regression: paragraph inside <w:body> still works (no behaviour change)", () => {
+    const archive = setup({
+      paragraphs: [{ text: "Body para", paraId: "B0000001" }],
+    });
+    const next = wrapBlock(
+      archive,
+      { startParaId: "B0000001", endParaId: "B0000001" },
+      { tag: "requisites:party_a", alias: "R", dataType: "text" },
+    );
+    const sdts = findElements(next.document, W_NS, "sdt");
+    expect(sdts).toHaveLength(1);
+    expect((sdts[0]?.parentNode as Element | null)?.localName).toBe("body");
+  });
+
+  it("allows wrapping inside a non-requisites block <w:sdtContent>", () => {
+    // Outer SDT carries a value-style tag (custom.section). Inner range
+    // wraps as a new requisites:party_a block — should succeed because
+    // outer is not a requisites:* tag.
+    const xml = `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:sdt>
+      <w:sdtPr><w:tag w:val="custom.section"/><w:alias w:val="Section"/></w:sdtPr>
+      <w:sdtContent>
+        <w:p w14:paraId="D1000001"><w:r><w:t>Inner para</w:t></w:r></w:p>
+      </w:sdtContent>
+    </w:sdt>
+  </w:body>
+</w:document>`;
+    const archive = parseDocXmlIntoFixture(xml);
+    const next = wrapBlock(
+      archive,
+      { startParaId: "D1000001", endParaId: "D1000001" },
+      { tag: "requisites:party_a", alias: "R", dataType: "text" },
+    );
+    // Now there are TWO SDTs: outer custom.section, inner requisites:party_a.
+    const sdts = findElements(next.document, W_NS, "sdt");
+    expect(sdts.length).toBe(2);
+    // The new SDT lives inside the outer sdtContent.
+    const requisites = sdts.find((s) => {
+      const sdtPr = findElements(s, W_NS, "sdtPr")[0];
+      const tagEl = sdtPr ? findElements(sdtPr, W_NS, "tag")[0] : null;
+      return tagEl?.getAttributeNS(W_NS, "val") === "requisites:party_a";
+    });
+    expect(requisites).toBeDefined();
+    expect((requisites?.parentNode as Element | null)?.localName).toBe("sdtContent");
+  });
+});

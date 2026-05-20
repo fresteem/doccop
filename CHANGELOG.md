@@ -7,7 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0-alpha.0] - 2026-05-20
+## [0.2.0-beta.0] - 2026-05-20
+
+### Added
+- **`wrapBlock` now accepts paragraphs inside `<w:tc>` (table cells) and
+  inside non-requisites `<w:sdtContent>`** in addition to `<w:body>`.
+  Real-world legal templates frequently lay out "requisites" content
+  inside layout tables; the engine no longer forces the host to lift
+  selections out of the cell. The SDT is inserted as a sibling INSIDE
+  the shared container, not promoted to `<w:body>`. Nesting inside an
+  existing `requisites:*` SDT is rejected with
+  `OverlappingPlaceholderError`. New tests cover single-cell wrapping,
+  multi-paragraph cell wrapping, multi-cell rejection, body regression,
+  and nested-in-non-requisites SDT.
+- **End-to-end render integration test** for a requisites block SDT
+  nested inside a table cell. Confirms `RequisitesEngine.locateBlockSdts`
+  finds the SDT at any depth (already recursive via `findElements`) and
+  that the injected snippet content lands inside the cell.
+- **`docs/QUICKSTART.md`** — runnable ten-minute walkthrough from
+  `npm install` through first render. Covers `wrap`, `EntityResolver`
+  shape, `RenderRequest` / `RenderConfig`, strict-vs-non-strict mode.
+- **`docs/INTEGRATION.md`** — adapter-by-adapter integration guide with
+  working code samples (S3 storage, JWT auth, pino logger, Postgres
+  numbering, Fastify wire-up). Includes the full `DocCopErrorCode` →
+  HTTP status table, i18n guidance, and migration patterns from
+  docxtemplater / Carbone / template-strings-in-DB hosts.
+- **`README.md` quickstart** — replaces the "Coming in Wave 13"
+  placeholder with a real `npm install` + minimal render example and
+  links into the docs.
+
+### Fixed
+- Cleaned up dead-code fallback (`: archive`) in
+  `POST /v1/templates/:id/placeholders` route handler — now uses an
+  explicit `if/else if/else` chain where the final `else` throws a
+  typed `InvalidPlaceholderTagError` instead of returning the
+  unmodified archive. Behaviour unchanged for valid requests; better
+  signal-to-noise for readers.
+- Cleaned up 14 `@throws {ErrorType}` JSDoc patterns across
+  `@doccop/core` to `@throws ErrorType — …` form. Cosmetic; the
+  api-extractor `tsdocMessageReporting` is now also silenced so
+  pre-existing patterns wouldn't fail CI again.
+
+### Changed
+- `PlaceholderWrapInput.location` is now optional (since `0.2.0-alpha.0`
+  when `blockRange` was added). Consumers destructuring
+  `input.location.paraId` without an optionality check will need to
+  guard with `?.` or branch on which field is present. Note: this is a
+  TypeScript-level shape change only; HTTP clients sending
+  `{ location: {...} }` continue to work unchanged.
 
 ### Added
 - **`PlaceholderEngine.wrapBlock(archive, { startParaId, endParaId }, spec)`**

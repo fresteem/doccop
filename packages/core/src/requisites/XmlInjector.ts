@@ -27,7 +27,7 @@ import { PlaceholderNotFoundError } from "../errors.js";
  * Replace each occurrence of the SDT carrying `tag` in `masterDoc`
  * with the block-level children of the snippet body.
  *
- * @throws {PlaceholderNotFoundError} when no matching SDT is present.
+ * @throws PlaceholderNotFoundError — when no matching SDT is present.
  *   The caller is expected to call this only when render confirmed
  *   the placeholder exists.
  */

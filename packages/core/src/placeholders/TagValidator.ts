@@ -39,7 +39,7 @@ export type DecomposedTag =
 /**
  * Validate a tag string and split it into its parts.
  *
- * @throws {InvalidPlaceholderTagError} when the tag does not match either
+ * @throws InvalidPlaceholderTagError — when the tag does not match either
  *   accepted shape, is empty, or exceeds the length limit.
  */
 export function decomposeTag(tag: string): DecomposedTag {
@@ -83,7 +83,7 @@ export function decomposeTag(tag: string): DecomposedTag {
 /**
  * Validate an alias string.
  *
- * @throws {InvalidPlaceholderTagError} when empty, too long, or contains
+ * @throws InvalidPlaceholderTagError — when empty, too long, or contains
  *   ASCII control characters.
  */
 export function validateAlias(tag: string, alias: string): void {

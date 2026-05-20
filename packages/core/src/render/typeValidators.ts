@@ -109,7 +109,7 @@ const VALIDATORS: Record<DataType, Validator> = {
  * Validate a resolved string against its placeholder's declared type.
  *
  * @returns the (possibly normalised) value.
- * @throws {TypeValidationFailedError} when validation fails.
+ * @throws TypeValidationFailedError — when validation fails.
  */
 export function validateValue(dataType: DataType, tag: string, value: string): string {
   const validator = VALIDATORS[dataType];

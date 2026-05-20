@@ -37,15 +37,25 @@ export interface WrapLocation {
 }
 
 /**
- * Inclusive range of top-level paragraphs to wrap into a block-level
- * `<w:sdt>`. Used by `wrapBlock` to mark whole-paragraph regions as
+ * Inclusive range of paragraphs to wrap into a block-level `<w:sdt>`.
+ * Used by `wrapBlock` to mark whole-paragraph regions as
  * `requisites:party_X` injection points.
  *
- * Both paraIds must refer to paragraphs that are direct children of
- * `<w:body>`. The range walks `startParaId.nextSibling` until it reaches
- * `endParaId`; any non-SDT siblings encountered (additional paragraphs,
- * tables) are pulled into the SDT alongside the bounds. Hitting an
- * existing SDT mid-range is rejected as an overlap.
+ * Both paraIds must refer to paragraphs that share the same direct
+ * parent, and that parent must be one of:
+ *
+ * - `<w:body>` — top-level paragraphs (the common case);
+ * - `<w:tc>`   — paragraphs inside a single table cell (common in
+ *                Ukrainian legal templates where the "requisites" block
+ *                lives inside a layout table);
+ * - `<w:sdtContent>` — nested inside another (non-requisites) block
+ *                SDT. Wrapping inside a `requisites:*` SDT is rejected
+ *                with `OverlappingPlaceholderError` (no recursion).
+ *
+ * The range walks `startParaId.nextSibling` until it reaches `endParaId`;
+ * any non-SDT siblings encountered (additional paragraphs, tables) are
+ * pulled into the new SDT alongside the bounds. Hitting an existing SDT
+ * mid-range is rejected as an overlap.
  *
  * `startParaId === endParaId` is allowed (single-paragraph block).
  */

@@ -31,8 +31,8 @@ export const OOXML_NAMESPACES: Readonly<Record<string, string>> = Object.freeze(
 /**
  * Parse an XML string while rejecting external-entity declarations.
  *
- * @throws {XxeDetectedError} if the input contains `<!ENTITY` (DTD ignored).
- * @throws {MalformedDocxError} on syntactic XML errors.
+ * @throws XxeDetectedError — if the input contains `<!ENTITY` (DTD ignored).
+ * @throws MalformedDocxError — on syntactic XML errors.
  */
 export function parseXmlSafely(xml: string, partName: string): Document {
   // Cheap textual scan before instantiating the parser. We don't try to

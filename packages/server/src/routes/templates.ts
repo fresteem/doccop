@@ -140,27 +140,27 @@ export function registerTemplateRoutes(app: FastifyInstance, cfg: DoccopServerCo
     ensureParaIds(archive);
 
     // `location` (inline) and `blockRange` (block) are mutually exclusive.
-    // Enforced here as a typed engine error so the response is 400 with
-    // the standard error envelope, not a generic Fastify 500.
+    // Reject both-present early so the routing below has a clean two-way
+    // choice. Reject both-absent in the final `else` so the response is
+    // a 400 with the standard error envelope, not a generic Fastify 500.
     if (body.blockRange !== undefined && body.location !== undefined) {
       throw new InvalidPlaceholderTagError(
         body.placeholder.tag,
         "provide exactly one of `location` (inline) or `blockRange` (block)",
       );
     }
-    if (body.blockRange === undefined && body.location === undefined) {
+
+    let wrapped: typeof archive;
+    if (body.blockRange !== undefined) {
+      wrapped = wrapBlock(archive, body.blockRange, body.placeholder);
+    } else if (body.location !== undefined) {
+      wrapped = wrap(archive, body.location, body.placeholder);
+    } else {
       throw new InvalidPlaceholderTagError(
         body.placeholder.tag,
         "provide exactly one of `location` (inline) or `blockRange` (block)",
       );
     }
-
-    const wrapped = body.blockRange
-      ? wrapBlock(archive, body.blockRange, body.placeholder)
-      : body.location
-        ? wrap(archive, body.location, body.placeholder)
-        : // Unreachable: the two guards above already throw when both are unset.
-          archive;
     const newBytes = serialize(wrapped);
     const newPlaceholders = list(wrapped);
 

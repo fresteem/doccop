@@ -32,9 +32,9 @@ export interface ParseOptions {
 /**
  * Parse a `.docx` byte array into a `DocxArchive`.
  *
- * @throws {TemplateTooLargeError} if `bytes.length` exceeds the limit.
- * @throws {MalformedDocxError} on zip errors or a missing document part.
- * @throws {XxeDetectedError} if document.xml contains an `<!ENTITY>` decl.
+ * @throws TemplateTooLargeError — if `bytes.length` exceeds the limit.
+ * @throws MalformedDocxError — on zip errors or a missing document part.
+ * @throws XxeDetectedError — if document.xml contains an `<!ENTITY>` decl.
  */
 export function parse(bytes: Uint8Array, opts: ParseOptions = {}): DocxArchive {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_TEMPLATE_BYTES;

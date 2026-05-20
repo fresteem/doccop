@@ -331,4 +331,83 @@ describe("render — requisites integration", () => {
     const reSerialized = serialize(reparsed);
     expect(reSerialized.length).toBeGreaterThan(0);
   });
+
+  it("renders a requisites block SDT nested inside a <w:tc>", async () => {
+    // Master document where the requisites:party_b block SDT lives
+    // INSIDE a table cell, not as a top-level body child. The
+    // RequisitesEngine must find it (locateBlockSdts uses recursive
+    // findElements) and the injected snippet content must land inside
+    // the same cell.
+    const masterBytes = buildDocx({
+      documentXml: `<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:p w14:paraId="HEAD0001"><w:r><w:t>Сторона Б:</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="5000" w:type="dxa"/></w:tcPr>
+          <w:sdt>
+            <w:sdtPr>
+              <w:tag w:val="requisites:party_b"/>
+              <w:alias w:val="Реквізити Б"/>
+            </w:sdtPr>
+            <w:sdtContent>
+              <w:p w14:paraId="MARK0001"><w:r><w:t>[Cell marker]</w:t></w:r></w:p>
+            </w:sdtContent>
+          </w:sdt>
+        </w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:p w14:paraId="TAIL0001"><w:r><w:t>Підпис</w:t></w:r></w:p>
+  </w:body>
+</w:document>`,
+      stylesXml: `<?xml version="1.0"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="normal"/></w:style>
+</w:styles>`,
+    });
+    const masterArchive = parse(masterBytes);
+    ensureParaIds(masterArchive);
+    const snippet = makeSnippet(buildSnippet());
+    const config: RenderConfig = {
+      resolvers: [
+        staticResolver("party_b", { full_name: "ACME Ltd", edrpou: "12345678", subtype: "TOV" }),
+      ],
+      requisitesResolver: snippetResolver(snippet),
+    };
+    const result = await render(masterArchive, makeRequest(), config);
+    expect(result.warnings).toEqual([]);
+
+    const reparsed = parse(result.docx);
+
+    // 1. The block marker is gone — SDT was replaced.
+    const allText = listParagraphs(reparsed)
+      .map((p) => p.element.textContent ?? "")
+      .join(" | ");
+    expect(allText).not.toContain("[Cell marker]");
+    // 2. The snippet body was substituted with resolved values.
+    expect(allText).toContain("ACME Ltd");
+    expect(allText).toContain("12345678");
+    expect(allText).toContain("Підпис");
+
+    // 3. The injected paragraphs must live INSIDE the <w:tc>, not
+    //    lifted up to <w:body>. Walk the tree to confirm.
+    const tcNodes = findElements(reparsed.document, W_NS, "tc");
+    expect(tcNodes.length).toBe(1);
+    const cellText = (tcNodes[0]?.textContent ?? "").replace(/\s+/g, " ");
+    expect(cellText).toContain("ACME Ltd");
+    expect(cellText).toContain("12345678");
+
+    // 4. No SDT remains under <w:body> or <w:tc> with the requisites tag.
+    const remaining = findElements(reparsed.document, W_NS, "sdt").filter((s) => {
+      const sdtPr = findElements(s, W_NS, "sdtPr")[0];
+      const tagEl = sdtPr ? findElements(sdtPr, W_NS, "tag")[0] : null;
+      return tagEl?.getAttributeNS(W_NS, "val") === "requisites:party_b";
+    });
+    expect(remaining).toHaveLength(0);
+  });
 });

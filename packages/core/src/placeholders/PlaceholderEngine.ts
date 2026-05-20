@@ -140,9 +140,9 @@ function findEnclosingParaId(sdt: Element): string | null {
  * `DocxArchive` with the mutation applied; the input archive is
  * unchanged.
  *
- * @throws {InvalidPlaceholderTagError} on bad tag/alias.
- * @throws {PlaceholderNotFoundError} if `loc.paraId` is unknown.
- * @throws {OverlappingPlaceholderError} if the selection range crosses
+ * @throws InvalidPlaceholderTagError — on bad tag/alias.
+ * @throws PlaceholderNotFoundError — if `loc.paraId` is unknown.
+ * @throws OverlappingPlaceholderError — if the selection range crosses
  *   an existing SDT (or its boundary falls inside one).
  * @throws Error for selections that would require splitting a complex
  *   run (tabs/breaks/multiple texts) — the UI should disable wrap on
@@ -361,32 +361,47 @@ function performSplits(
 // ─── wrapBlock ─────────────────────────────────────────────────────────────
 
 /**
- * Wrap an inclusive range of top-level paragraphs in a block-level
- * `<w:sdt>`. Used to mark whole-paragraph regions as
- * `requisites:party_X` injection points — the `RequisitesEngine` (Wave 6)
- * locates these block SDTs at render time and replaces them with the
- * per-subtype snippet body.
+ * Wrap an inclusive range of paragraphs in a block-level `<w:sdt>`.
+ * Used to mark whole-paragraph regions as `requisites:party_X` injection
+ * points — the `RequisitesEngine` (Wave 6) locates these block SDTs at
+ * render time and replaces them with the per-subtype snippet body.
  *
  * Unlike `wrap`, which produces an INLINE SDT inside one paragraph,
- * `wrapBlock` produces a SIBLING SDT in `<w:body>` next to the paragraphs
- * it captures.
+ * `wrapBlock` produces a SIBLING SDT next to the paragraphs it captures,
+ * INSIDE whatever container they live in. Supported containers:
  *
- * @param archive  Source archive. Not mutated.
- * @param opts     Inclusive paragraph-id range. `startParaId === endParaId`
- *                 is allowed (single-paragraph block). Both paraIds must
- *                 resolve to paragraphs that are direct children of `<w:body>`.
- * @param spec     Placeholder spec. `spec.tag` MUST match `requisites:party_<id>`;
- *                 inline value placeholders go through `wrap`.
+ * - `<w:body>` — top-level paragraphs.
+ * - `<w:tc>`   — paragraphs inside a single table cell. Real-world
+ *                Ukrainian legal templates frequently lay out requisites
+ *                inside a table; this lets the editor wrap them in place
+ *                without lifting them out of the cell.
+ * - `<w:sdtContent>` — nested inside another (non-requisites) block
+ *                SDT. Wrapping inside a `requisites:*` SDT throws
+ *                `OverlappingPlaceholderError` because the
+ *                `RequisitesEngine` itself forbids nested requisites
+ *                snippets.
  *
- * @throws {InvalidPlaceholderTagError} when `spec.tag` is not a `requisites:*`
- *   tag, or `spec.alias` is malformed.
- * @throws {PlaceholderNotFoundError}   when either paraId is unknown.
- * @throws {OverlappingPlaceholderError} when the range crosses an existing
- *   sibling SDT — caller must unwrap first.
- * @throws Error for ranges whose bounds don't share a `<w:body>` parent,
- *   or where `endParaId` does not come after `startParaId` in document
- *   order. These represent client-side bugs (selection across structural
- *   boundaries) and are not modelled as `DocCopError`s in v1.
+ * @param archive Source archive. Not mutated.
+ * @param opts Inclusive paragraph-id range. `startParaId === endParaId`
+ *   is allowed (single-paragraph block). Both paraIds must resolve to
+ *   paragraphs that share a single direct parent of one of the
+ *   supported kinds above.
+ * @param spec Placeholder spec. `spec.tag` MUST match
+ *   `requisites:party_<id>`; inline value placeholders go through
+ *   `wrap`.
+ *
+ * @throws InvalidPlaceholderTagError when `spec.tag` is not a
+ *   `requisites:*` tag, or `spec.alias` is malformed.
+ * @throws PlaceholderNotFoundError when either paraId is unknown.
+ * @throws OverlappingPlaceholderError when the range crosses an
+ *   existing sibling SDT, or when the bounding paragraphs sit inside
+ *   an existing `requisites:*` block SDT.
+ * @throws Error for ranges whose bounds don't share the same direct
+ *   parent, where the shared parent is not one of body / tc /
+ *   sdtContent, or where `endParaId` does not come after `startParaId`
+ *   in document order. These represent client-side bugs (selection
+ *   across structural boundaries) and are not modelled as
+ *   `DocCopError`s in v1.
  */
 export function wrapBlock(
   archive: DocxArchive,
@@ -410,25 +425,18 @@ export function wrapBlock(
   const endPara = findParagraphByParaId(cloned, opts.endParaId);
   if (!endPara) throw new PlaceholderNotFoundError(opts.endParaId);
 
-  // 3. Both must share the <w:body> parent. Paragraphs inside table cells
-  //    or inside an existing block SDT are rejected — the UI should not
-  //    allow such a selection.
+  // 3. Both must share the same direct parent. The shared parent must
+  //    be a supported container (body / tc / sdtContent). Paragraphs in
+  //    different cells, different rows, or one inside an existing block
+  //    SDT will trip the same-parent check; nesting inside an existing
+  //    requisites:* SDT trips the overlap check in validateContainer.
   const parent = startPara.parentNode;
   if (!parent || parent !== endPara.parentNode) {
     throw new Error(
       `wrapBlock: startParaId (${opts.startParaId}) and endParaId (${opts.endParaId}) must share the same parent`,
     );
   }
-  if (
-    parent.nodeType !== 1 ||
-    (parent as Element).namespaceURI !== W_NS ||
-    (parent as Element).localName !== "body"
-  ) {
-    throw new Error(
-      "wrapBlock: range must consist of top-level paragraphs directly under <w:body>",
-    );
-  }
-  const body = parent as Element;
+  const container = validateContainer(parent);
 
   // 4. Walk start → end via nextSibling, collecting elements. Refuse to
   //    cross an existing SDT — that's an overlap and the caller must
@@ -466,15 +474,64 @@ export function wrapBlock(
   }
 
   // 5. Build the SDT, splice it in, and move the ranged elements into it.
+  //    The SDT becomes a sibling INSIDE `container` — not lifted to <w:body>.
   const sdt = buildSdt(cloned.document, { tag: spec.tag, alias: spec.alias });
   const sdtContent = getSdtContent(sdt);
-  body.insertBefore(sdt, firstInRange);
+  container.insertBefore(sdt, firstInRange);
   for (const el of range) {
-    body.removeChild(el);
+    container.removeChild(el);
     sdtContent.appendChild(el);
   }
 
   return cloned;
+}
+
+/**
+ * Validate that `parent` is one of `wrapBlock`'s supported containers
+ * (`<w:body>`, `<w:tc>`, or non-requisites `<w:sdtContent>`) and return
+ * it narrowed to `Element`.
+ *
+ * Throws `OverlappingPlaceholderError` for the special case of an
+ * `<w:sdtContent>` whose enclosing SDT carries a `requisites:*` tag —
+ * the engine forbids nesting requisites blocks inside each other
+ * (`RequisitesEngine` rejects the same shape at render time).
+ */
+function validateContainer(parent: Node): Element {
+  if (parent.nodeType !== 1) {
+    throw new Error("wrapBlock: parent is not an element node");
+  }
+  const el = parent as Element;
+  if (el.namespaceURI !== W_NS) {
+    throw new Error("wrapBlock: parent element is not in the wordprocessingml namespace");
+  }
+  if (el.localName === "body" || el.localName === "tc") {
+    return el;
+  }
+  if (el.localName === "sdtContent") {
+    // Walk up one level to inspect the enclosing <w:sdt>'s tag. If it
+    // is a `requisites:*` placeholder we refuse — that would nest
+    // requisites in requisites, which the RequisitesEngine cannot
+    // render. Any other (non-requisites) enclosing SDT is fine.
+    const enclosingSdt = el.parentNode;
+    if (
+      enclosingSdt &&
+      enclosingSdt.nodeType === 1 &&
+      (enclosingSdt as Element).namespaceURI === W_NS &&
+      (enclosingSdt as Element).localName === "sdt"
+    ) {
+      const enclEl = enclosingSdt as Element;
+      const sdtPr = directChild(enclEl, W_NS, "sdtPr");
+      const tagEl = sdtPr ? directChild(sdtPr, W_NS, "tag") : null;
+      const enclosingTag = tagEl?.getAttributeNS(W_NS, "val") ?? "";
+      if (enclosingTag.startsWith("requisites:")) {
+        throw new OverlappingPlaceholderError(enclosingTag);
+      }
+    }
+    return el;
+  }
+  throw new Error(
+    `wrapBlock: parent <w:${el.localName}> is not a supported container (expected body, tc, or sdtContent)`,
+  );
 }
 
 // ─── unwrap ────────────────────────────────────────────────────────────────
@@ -483,7 +540,7 @@ export function wrapBlock(
  * Remove the SDT with the matching tag and put its content back into
  * the parent. Returns a fresh archive.
  *
- * @throws {PlaceholderNotFoundError} if no SDT with that tag exists.
+ * @throws PlaceholderNotFoundError — if no SDT with that tag exists.
  */
 export function unwrap(archive: DocxArchive, tag: string): DocxArchive {
   const cloned = cloneArchive(archive);
@@ -540,7 +597,7 @@ export function unwrap(archive: DocxArchive, tag: string): DocxArchive {
  * When the previous content has no run at all the new run carries no
  * `<w:rPr>` and renders in the paragraph's default formatting.
  *
- * @throws {PlaceholderNotFoundError} if no SDT with that tag exists.
+ * @throws PlaceholderNotFoundError — if no SDT with that tag exists.
  */
 export function replace(archive: DocxArchive, tag: string, value: string): DocxArchive {
   const cloned = cloneArchive(archive);
