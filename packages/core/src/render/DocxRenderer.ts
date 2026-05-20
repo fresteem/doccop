@@ -30,6 +30,7 @@ import {
 } from "../errors.js";
 import { list, replace } from "../placeholders/PlaceholderEngine.js";
 import { decomposeTag } from "../placeholders/TagValidator.js";
+import { resolveAndInject } from "../requisites/RequisitesEngine.js";
 import type {
   DataType,
   EntityResolver,
@@ -68,10 +69,87 @@ export async function render(
   const t0 = Date.now();
   const strict = config.options?.strict !== false; // default true
   const ctx = buildResolveContext(req, req.templateCategory);
-  const placeholders = list(template, dataTypes);
 
   const warnings: RenderWarning[] = [];
   const resolved: Record<string, string> = {};
+
+  // ── Phase 1: Requisites injection ──────────────────────────────────────
+  // Block-level `requisites:party_*` SDTs must be expanded into snippet
+  // content before we resolve the rest of the document, because injected
+  // snippet paragraphs may themselves carry value placeholders that pass
+  // 2 will need to substitute.
+  let current = template;
+  let stylePrefixCounter = 0;
+  const requisitesPlaceholders = list(current, dataTypes).filter(
+    (p) => decomposeTag(p.tag).kind === "requisites",
+  );
+  for (const ph of requisitesPlaceholders) {
+    const decomposed = decomposeTag(ph.tag);
+    if (decomposed.kind !== "requisites") continue; // narrowing
+    const targetParty = decomposed.partyRole;
+    const party = ctx.parties[targetParty];
+    if (!party) {
+      if (strict) {
+        throw new AbsentValueInStrictModeError(
+          ph.tag,
+          `no party '${targetParty}' in render request`,
+        );
+      }
+      warnings.push({
+        kind: "snippet_missing",
+        tag: ph.tag,
+        detail: `no party '${targetParty}'`,
+      });
+      continue;
+    }
+    // Look up the entity subtype via the party's regular resolver. The
+    // host's OrganizationsResolver convention: `subtype` returns the
+    // legal-entity form code (TOV/FOP/PP/…).
+    const partyResolver = findResolver(config.resolvers, targetParty as EntityResolver["scope"]);
+    let entitySubtype: string | null = null;
+    if (partyResolver) {
+      try {
+        const sub = await partyResolver.resolve("subtype", ctx);
+        if (sub.kind === "text") entitySubtype = sub.value;
+      } catch (err) {
+        if (strict) throw new ResolverFailedError(ph.tag, err);
+        warnings.push({
+          kind: "snippet_missing",
+          tag: ph.tag,
+          detail: `resolver for '${targetParty}.subtype' threw: ${String(err)}`,
+        });
+        continue;
+      }
+    }
+    stylePrefixCounter++;
+    const stylePrefix = `s${stylePrefixCounter}_`;
+    const result = await resolveAndInject({
+      master: current,
+      tag: ph.tag,
+      targetParty,
+      entityType: party.entityType,
+      entitySubtype,
+      resolver: config.requisitesResolver,
+      renderRequest: req,
+      renderConfig: config,
+      ...(dataTypes.size > 0 ? { dataTypes } : {}),
+      stylePrefix,
+      strict,
+    });
+    if (result.skipped) {
+      warnings.push({
+        kind: "snippet_missing",
+        tag: ph.tag,
+        detail: result.reason ?? "skipped",
+      });
+    }
+    current = result.master;
+  }
+
+  // ── Phase 2: Value-placeholder resolution ──────────────────────────────
+  // After requisites injection, re-list placeholders so we see any new
+  // SDTs that came from injected snippet bodies.
+  const placeholders = list(current, dataTypes);
   const pending: PendingSubstitution[] = [];
 
   // ── Resolution pass: collect everything before mutating ────────────────
@@ -79,25 +157,7 @@ export async function render(
     const decomposed = decomposeTag(ph.tag);
 
     if (decomposed.kind === "requisites") {
-      // Wave 5: requisites are handled by Wave 6's injection step. We
-      // leave them untouched here and surface a warning so callers
-      // notice that the rendered output still contains the marker.
-      if (!config.requisitesResolver) {
-        warnings.push({
-          kind: "snippet_missing",
-          tag: ph.tag,
-          detail: "no requisitesResolver configured; the SDT remains in the output",
-        });
-        if (strict) {
-          throw new AbsentValueInStrictModeError(ph.tag, "requisites injection not configured");
-        }
-      } else {
-        warnings.push({
-          kind: "snippet_missing",
-          tag: ph.tag,
-          detail: "snippet injection is Wave 6 — not executed by this renderer yet",
-        });
-      }
+      // Skipped during Phase 1 (non-strict) — leave in place with warning.
       pending.push({
         tag: ph.tag,
         scope: ph.scope,
@@ -181,10 +241,10 @@ export async function render(
     }
   }
 
-  // ── Substitution pass: apply mutations on a clone ──────────────────────
-  let current = template;
+  // ── Substitution pass: apply mutations on the working archive ─────────
+  // `current` already carries any requisites snippets that Phase 1 injected.
   for (const sub of pending) {
-    if (sub.value === null) continue; // requisites left alone
+    if (sub.value === null) continue; // requisites left alone (skipped in non-strict)
     current = replace(current, sub.tag, sub.value);
   }
 

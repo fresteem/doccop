@@ -71,3 +71,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Image substitution out of scope for v1 — surfaces a warning.
   - `RenderResult` returns `docx` bytes, `resolvedValues` audit map,
     `warnings`, `durationMs`.
+- Wave 6: RequisitesEngine — per-subtype block injection.
+  - `injectRequisites(req)` orchestrates: parse snippet → ensureParaIds
+    → rewrite bare-key tags to scoped form → render placeholders via
+    `DocxRenderer` → remap styles/numbering/bookmarks → splice into
+    master → merge auxiliary parts.
+  - `TagRewriter` — bare `{{full_name}}` → `{{party_a.full_name}}`
+    based on the target party slot. Rejects nested `requisites:*`
+    (no recursion). Leaves already-qualified tags alone.
+  - `StyleRemapper` — prefixes every snippet styleId with a salt
+    (`s1_Heading1`), updates body `<w:pStyle>`/`<w:rStyle>`/`<w:tblStyle>`
+    refs and intra-styles `<w:basedOn>`/`<w:next>`/`<w:link>` cross-
+    references. Merges into master via `mergeStylesIntoMaster`.
+  - `NumberingRemapper` — offsets snippet `<w:numId>` and
+    `<w:abstractNumId>` above master's max, updates body `<w:numId>`
+    refs and inner `<w:abstractNumId>` refs inside `<w:num>`.
+  - `BookmarkRemapper` — rerandomizes `<w:bookmarkStart>`/`<w:bookmarkEnd>`
+    ID pairs to 31-bit positive integers.
+  - `XmlInjector` — locates block-level `<w:sdt>` (not inside `<w:p>`)
+    in master, extracts snippet body's top-level `<w:p>`/`<w:tbl>`
+    children, deep-clones them into the master document via
+    `importNode`, replaces SDT.
+  - `SnippetArchive` — lazy-parses styles.xml / numbering.xml /
+    document.xml.rels from `rawParts` on demand; writes merged
+    versions back via `writeAuxiliaryParts`.
+  - `resolveAndInject` — strict-mode-aware wrapper that the
+    `DocxRenderer` calls per requisites placeholder.
+  - DocxRenderer refactored to two-phase: Phase 1 injects requisites,
+    Phase 2 substitutes value placeholders against the (now-larger)
+    document. Strict-mode failures throw before any mutation reaches
+    serialization.
+  - Snippets parsed with `ensureParaIds` so `PlaceholderEngine.list()`
+    surfaces SDTs regardless of authored paraId format.
+  - Image rels remain a v2 extension point (snippets are text-only by
+    convention).
