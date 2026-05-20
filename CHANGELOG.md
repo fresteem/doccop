@@ -31,3 +31,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and `>` in attributes too, not just `&` and `"`).
   - Tables rendered as native HTML tables.
   - All text and attribute values escaped — XSS-safe.
+- Wave 4: PlaceholderEngine — SDT wrap/unwrap/list/replace.
+  - `wrap(archive, loc, spec)` — wraps a paragraph-anchored text
+    selection in a new `<w:sdt>` placeholder. Splits runs mid-text when
+    selection boundaries fall inside them, preserving `<w:rPr>`
+    formatting on every resulting piece. Same-run mid-mid selections
+    produce three runs (left, wrapped middle, right). Cross-run selections
+    handled similarly.
+  - `unwrap(archive, tag)` — removes the matching SDT, restores its
+    content to the parent.
+  - `list(archive, dataTypes?)` — enumerates every placeholder in
+    document order with scope/key decomposition and paraId anchor.
+  - `replace(archive, tag, value)` — substitutes content (used by
+    DocxRenderer in Wave 5). Multiple SDTs with the same tag are all
+    updated (Word "data binding" pattern).
+  - Tag validation: `<scope>.<key>` (party_a/system/custom) or
+    `requisites:party_<id>`. Length 1..100, lowercase alphanumeric
+    with underscores. Alias 1..200 chars, no ASCII control characters.
+  - Overlap detection: refuses to wrap a range that crosses an existing
+    SDT (`OverlappingPlaceholderError`).
+  - All mutations clone the archive — input is never touched.
