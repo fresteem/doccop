@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-20
+
+**Stable release.** Promotes `0.2.0-beta.1` after a successful beta soak — no code, API, or behavioural changes since the beta. See the `[0.2.0-beta.1]` entry below for the complete feature list.
+
+This is the first `latest`-tagged release. `npm install @doccop/core` (and the sibling packages) without an explicit tag will now resolve to `0.2.0`. The previous `latest` was `0.1.0-alpha.0`, which remains installable via its exact version pin.
+
+### Compatibility with the 0.1.x line
+
+`0.1.0-alpha.0` consumers should bump straight to `0.2.0` — every public symbol present in `0.1.0-alpha.0` is still present in `0.2.0`, with three additive surface changes:
+
+- `Logger` interface + `NoopLogger` default on `DocCopConfig.logger` (since `0.2.0-alpha.0`)
+- `wrapBlock(archive, { startParaId, endParaId }, spec)` + `BlockWrapLocation` (since `0.2.0-alpha.0`)
+- `wrapBareKey(archive, location, spec)` + `BareKeyPlaceholderSpec` + `compileTextTokens(archive, options?)` (since `0.2.0-beta.1`)
+
+And one bug fix that may affect host integrations:
+
+- `HtmlRenderer` now reports `data-run-index` agreeing with `wrap()`'s direct-`<w:r>` counting. Hosts that previously worked around the inconsistency need to remove their workaround.
+
 ## [0.2.0-beta.1] - 2026-05-20
 
 ### Added — snippet authoring APIs
