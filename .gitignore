@@ -10,3 +10,9 @@ coverage/
 
 # api-extractor working area — committed snapshots live in packages/*/etc/
 packages/*/temp/
+
+# Claude Code project-local tooling — agent definitions and CLAUDE.md are
+# developer-instance state, not part of the published project. Tool-agnostic
+# guidance lives in AGENTS.md (agents.md spec) and doccop-AGENTS.md.
+.claude/
+CLAUDE.md
