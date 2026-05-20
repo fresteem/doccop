@@ -31,7 +31,7 @@ _Coming in Wave 13 — packaging + docs._
 
 ## Repo layout
 
-This repo is currently developed as a folder inside the [fest-ops](https://) host application for end-to-end iteration. It will be extracted to a standalone repository (`github.com/doccop-org`) via `git subtree split` once stable.
+This is a standalone OSS project. The engine was originally developed as a folder inside a host application (`fest-ops`) for end-to-end iteration, then extracted via `git subtree split` to this repo (`github.com/fresteem/doccop`).
 
 ```
 doccop/
