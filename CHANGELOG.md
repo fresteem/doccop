@@ -139,3 +139,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ensureParaIds` / `list` / `wrap` / `unwrap` / `replace` / `render` /
   `preview` from `@doccop/core` main barrel (was Wave 1-6 only types
   before).
+- Wave 8: `@doccop/storage-postgres` — reference store impls.
+  - Drizzle ORM schema mirroring every server interface (7 tables).
+  - SQL migration `migrations/0000_init.sql` ready to apply against
+    any Postgres 14+ instance.
+  - Concrete classes for every store: `PostgresTemplateStore`,
+    `PostgresTemplateVersionStore`, `PostgresSnippetStore`,
+    `PostgresSnippetVersionStore`, `PostgresDocumentStore`,
+    `PostgresIdempotencyStore`, `PostgresDataTypeRegistry`. All wired
+    against a host-provided Drizzle handle — package never opens its
+    own connection.
+  - `PostgresTemplateStore.setCurrentVersion` uses optimistic locking
+    via `UPDATE … WHERE current_version_id = expected` precondition
+    (server maps a null return to 409 Conflict).
+  - `PostgresSnippetStore.upsert` uses `ON CONFLICT (entity_type,
+    entity_subtype) DO UPDATE` so admin "replace snippet" is a
+    single round trip.
+  - `PostgresIdempotencyStore.store` uses `ON CONFLICT DO NOTHING` to
+    avoid unique-violation races on replays. Includes a
+    `cleanupOlderThan(date)` helper for host cron jobs.
+  - `PostgresDataTypeRegistry.seed(rows)` convenience for populating
+    the variables catalogue from a static list.
+  - `FilesystemBlobStorage` — disk-backed `StorageAdapter` for the
+    demo app. Sanitises owner ids, blocks path-traversal attempts,
+    wraps fs errors in `StorageFailedError`.
+- Dependencies added (all MIT/Apache-2.0):
+  - drizzle-orm@0.36.4 (Apache-2.0)
+  - postgres@3.4.5 (MIT)
