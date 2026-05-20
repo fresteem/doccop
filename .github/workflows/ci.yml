@@ -9,12 +9,16 @@ on:
 jobs:
   build-test-lint:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install
@@ -26,9 +30,15 @@ jobs:
       # `build` invokes tsc which type-checks AND emits dist/. Downstream
       # workspaces resolve @doccop/* via node_modules symlinks that point
       # at dist/, so it must run before any step that imports cross-
-      # package types (test, separate typecheck).
+      # package types (test, api:check).
       - name: Build
         run: npm run build
 
       - name: Test
         run: npm test
+
+      - name: API surface check
+        run: npm run api:check
+
+      - name: License check
+        run: npm run license:check

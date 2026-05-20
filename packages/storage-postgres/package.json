@@ -1,6 +1,6 @@
 {
   "name": "@doccop/storage-postgres",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.0-alpha.0",
   "description": "Postgres reference implementation of doccop store interfaces (Drizzle ORM)",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -36,8 +38,8 @@
     "directory": "packages/storage-postgres"
   },
   "dependencies": {
-    "@doccop/core": "0.1.0-alpha.0",
-    "@doccop/server": "0.1.0-alpha.0",
+    "@doccop/core": "0.2.0-alpha.0",
+    "@doccop/server": "0.2.0-alpha.0",
     "drizzle-orm": "0.36.4",
     "postgres": "3.4.5"
   }

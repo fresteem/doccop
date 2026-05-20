@@ -37,13 +37,30 @@ export const TemplateIdParamSchema = z.object({
 });
 
 export const PlaceholderWrapSchema = z.object({
-  location: z.object({
-    paraId: z.string().regex(/^[0-9A-F]{8}$/),
-    startRunIndex: z.number().int().min(0),
-    startOffset: z.number().int().min(0),
-    endRunIndex: z.number().int().min(0),
-    endOffset: z.number().int().min(0),
-  }),
+  /**
+   * Inline wrap location. Mutually exclusive with `blockRange`; exactly
+   * one of the two must be present (enforced in the route handler).
+   */
+  location: z
+    .object({
+      paraId: z.string().regex(/^[0-9A-F]{8}$/),
+      startRunIndex: z.number().int().min(0),
+      startOffset: z.number().int().min(0),
+      endRunIndex: z.number().int().min(0),
+      endOffset: z.number().int().min(0),
+    })
+    .optional(),
+  /**
+   * Inclusive paragraph range to wrap as a block-level SDT. Mutually
+   * exclusive with `location`. Requires `placeholder.tag` of the
+   * `requisites:party_<id>` form.
+   */
+  blockRange: z
+    .object({
+      startParaId: z.string().regex(/^[0-9A-F]{8}$/),
+      endParaId: z.string().regex(/^[0-9A-F]{8}$/),
+    })
+    .optional(),
   placeholder: z.object({
     tag: TagSchema,
     alias: AliasSchema,

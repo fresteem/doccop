@@ -37,6 +37,26 @@ export interface WrapLocation {
 }
 
 /**
+ * Inclusive range of top-level paragraphs to wrap into a block-level
+ * `<w:sdt>`. Used by `wrapBlock` to mark whole-paragraph regions as
+ * `requisites:party_X` injection points.
+ *
+ * Both paraIds must refer to paragraphs that are direct children of
+ * `<w:body>`. The range walks `startParaId.nextSibling` until it reaches
+ * `endParaId`; any non-SDT siblings encountered (additional paragraphs,
+ * tables) are pulled into the SDT alongside the bounds. Hitting an
+ * existing SDT mid-range is rejected as an overlap.
+ *
+ * `startParaId === endParaId` is allowed (single-paragraph block).
+ */
+export interface BlockWrapLocation {
+  /** `w14:paraId` of the first paragraph in the inclusive range. */
+  startParaId: string;
+  /** `w14:paraId` of the last paragraph in the inclusive range. */
+  endParaId: string;
+}
+
+/**
  * Specification for a new placeholder. The engine validates `tag` and
  * `alias` then writes them into `<w:sdtPr>`. `dataType` is recorded in
  * the engine's Placeholder catalogue for runtime validation but is not

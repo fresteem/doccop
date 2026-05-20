@@ -16,7 +16,11 @@ import type { Element, Node } from "@xmldom/xmldom";
 import { listParagraphs } from "../docx/AnchorMapper.js";
 import type { DocxArchive } from "../docx/types.js";
 import { W14_NS, W_NS, findElements, parseXmlSafely, serializeXml } from "../docx/xml-utils.js";
-import { OverlappingPlaceholderError, PlaceholderNotFoundError } from "../errors.js";
+import {
+  InvalidPlaceholderTagError,
+  OverlappingPlaceholderError,
+  PlaceholderNotFoundError,
+} from "../errors.js";
 import type { DataType, Placeholder } from "../types.js";
 import { buildSdt, getSdtContent } from "./SdtBuilder.js";
 import { decomposeTag, validateAlias } from "./TagValidator.js";
@@ -30,7 +34,7 @@ import {
   runText,
   splitSimpleRun,
 } from "./run-utils.js";
-import type { PlaceholderSpec, WrapLocation } from "./types.js";
+import type { BlockWrapLocation, PlaceholderSpec, WrapLocation } from "./types.js";
 
 // ─── list ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +358,125 @@ function performSplits(
   return collected;
 }
 
+// ─── wrapBlock ─────────────────────────────────────────────────────────────
+
+/**
+ * Wrap an inclusive range of top-level paragraphs in a block-level
+ * `<w:sdt>`. Used to mark whole-paragraph regions as
+ * `requisites:party_X` injection points — the `RequisitesEngine` (Wave 6)
+ * locates these block SDTs at render time and replaces them with the
+ * per-subtype snippet body.
+ *
+ * Unlike `wrap`, which produces an INLINE SDT inside one paragraph,
+ * `wrapBlock` produces a SIBLING SDT in `<w:body>` next to the paragraphs
+ * it captures.
+ *
+ * @param archive  Source archive. Not mutated.
+ * @param opts     Inclusive paragraph-id range. `startParaId === endParaId`
+ *                 is allowed (single-paragraph block). Both paraIds must
+ *                 resolve to paragraphs that are direct children of `<w:body>`.
+ * @param spec     Placeholder spec. `spec.tag` MUST match `requisites:party_<id>`;
+ *                 inline value placeholders go through `wrap`.
+ *
+ * @throws {InvalidPlaceholderTagError} when `spec.tag` is not a `requisites:*`
+ *   tag, or `spec.alias` is malformed.
+ * @throws {PlaceholderNotFoundError}   when either paraId is unknown.
+ * @throws {OverlappingPlaceholderError} when the range crosses an existing
+ *   sibling SDT — caller must unwrap first.
+ * @throws Error for ranges whose bounds don't share a `<w:body>` parent,
+ *   or where `endParaId` does not come after `startParaId` in document
+ *   order. These represent client-side bugs (selection across structural
+ *   boundaries) and are not modelled as `DocCopError`s in v1.
+ */
+export function wrapBlock(
+  archive: DocxArchive,
+  opts: BlockWrapLocation,
+  spec: PlaceholderSpec,
+): DocxArchive {
+  // 1. Validate the tag is a requisites placeholder, not a value one.
+  const decomposed = decomposeTag(spec.tag);
+  if (decomposed.kind !== "requisites") {
+    throw new InvalidPlaceholderTagError(
+      spec.tag,
+      "wrapBlock requires a requisites:party_<id> tag; use wrap() for value placeholders",
+    );
+  }
+  validateAlias(spec.tag, spec.alias);
+
+  // 2. Locate the bounding paragraphs in a fresh clone.
+  const cloned = cloneArchive(archive);
+  const startPara = findParagraphByParaId(cloned, opts.startParaId);
+  if (!startPara) throw new PlaceholderNotFoundError(opts.startParaId);
+  const endPara = findParagraphByParaId(cloned, opts.endParaId);
+  if (!endPara) throw new PlaceholderNotFoundError(opts.endParaId);
+
+  // 3. Both must share the <w:body> parent. Paragraphs inside table cells
+  //    or inside an existing block SDT are rejected — the UI should not
+  //    allow such a selection.
+  const parent = startPara.parentNode;
+  if (!parent || parent !== endPara.parentNode) {
+    throw new Error(
+      `wrapBlock: startParaId (${opts.startParaId}) and endParaId (${opts.endParaId}) must share the same parent`,
+    );
+  }
+  if (
+    parent.nodeType !== 1 ||
+    (parent as Element).namespaceURI !== W_NS ||
+    (parent as Element).localName !== "body"
+  ) {
+    throw new Error(
+      "wrapBlock: range must consist of top-level paragraphs directly under <w:body>",
+    );
+  }
+  const body = parent as Element;
+
+  // 4. Walk start → end via nextSibling, collecting elements. Refuse to
+  //    cross an existing SDT — that's an overlap and the caller must
+  //    unwrap first. Non-element nodes (text, comments) are skipped.
+  const range: Element[] = [];
+  let cur: Node | null = startPara;
+  let reachedEnd = false;
+  while (cur) {
+    if (cur.nodeType === 1) {
+      const el = cur as Element;
+      if (el.namespaceURI === W_NS && el.localName === "sdt") {
+        const existingPr = directChild(el, W_NS, "sdtPr");
+        const existingTag = existingPr
+          ? (directChild(existingPr, W_NS, "tag")?.getAttributeNS(W_NS, "val") ?? "unknown")
+          : "unknown";
+        throw new OverlappingPlaceholderError(existingTag);
+      }
+      range.push(el);
+    }
+    if (cur === endPara) {
+      reachedEnd = true;
+      break;
+    }
+    cur = cur.nextSibling;
+  }
+  if (!reachedEnd) {
+    throw new Error(
+      `wrapBlock: endParaId (${opts.endParaId}) does not come after startParaId (${opts.startParaId}) in document order`,
+    );
+  }
+  const firstInRange = range[0];
+  if (!firstInRange) {
+    // Unreachable: startPara is always pushed first.
+    throw new Error("wrapBlock: empty range after collection");
+  }
+
+  // 5. Build the SDT, splice it in, and move the ranged elements into it.
+  const sdt = buildSdt(cloned.document, { tag: spec.tag, alias: spec.alias });
+  const sdtContent = getSdtContent(sdt);
+  body.insertBefore(sdt, firstInRange);
+  for (const el of range) {
+    body.removeChild(el);
+    sdtContent.appendChild(el);
+  }
+
+  return cloned;
+}
+
 // ─── unwrap ────────────────────────────────────────────────────────────────
 
 /**
@@ -406,6 +529,17 @@ export function unwrap(archive: DocxArchive, tag: string): DocxArchive {
  * Multiple matches are supported because Word allows the same content
  * control to appear in many places (a "data binding" pattern).
  *
+ * Run-property preservation: the substituted run inherits `<w:rPr>` from
+ * the FIRST `<w:r>` descendant of the SDT's previous content (depth-first
+ * document order). This keeps bold / italic / font-size / colour / font-
+ * family applied to placeholder text — critical for legal documents
+ * where signatory names and IBANs are typically bold. When the previous
+ * content contains multiple runs with different formatting (rare; happens
+ * after wrapping a selection that crossed a formatting boundary), only
+ * the first run's `<w:rPr>` is applied — known limitation, simplest rule.
+ * When the previous content has no run at all the new run carries no
+ * `<w:rPr>` and renders in the paragraph's default formatting.
+ *
  * @throws {PlaceholderNotFoundError} if no SDT with that tag exists.
  */
 export function replace(archive: DocxArchive, tag: string, value: string): DocxArchive {
@@ -421,6 +555,14 @@ export function replace(archive: DocxArchive, tag: string, value: string): DocxA
 
     const content = directChild(sdt, W_NS, "sdtContent");
     if (!content) continue;
+
+    // Capture <w:rPr> from the first descendant run BEFORE wiping the
+    // content. Deep-clone so subsequent mutations on `cloned.document`
+    // can't reach back into the captured node.
+    const firstRun = findElements(content, W_NS, "r")[0];
+    const firstRpr = firstRun ? directChild(firstRun, W_NS, "rPr") : null;
+    const preservedRpr = firstRpr ? (firstRpr.cloneNode(true) as Element) : null;
+
     // Wipe children.
     let n: Node | null = content.firstChild;
     while (n) {
@@ -428,8 +570,12 @@ export function replace(archive: DocxArchive, tag: string, value: string): DocxA
       content.removeChild(n);
       n = next;
     }
-    // Insert a fresh `<w:r><w:t xml:space="preserve">value</w:t></w:r>`.
+    // Insert a fresh `<w:r>[<w:rPr>...</w:rPr>]<w:t xml:space="preserve">value</w:t></w:r>`.
+    // OOXML requires <w:rPr> to precede content children inside <w:r>.
     const newRun = cloned.document.createElementNS(W_NS, "w:r");
+    if (preservedRpr) {
+      newRun.appendChild(preservedRpr);
+    }
     const t = cloned.document.createElementNS(W_NS, "w:t");
     t.setAttribute("xml:space", "preserve");
     t.appendChild(cloned.document.createTextNode(value));

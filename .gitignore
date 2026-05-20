@@ -7,3 +7,6 @@ coverage/
 .env
 .env.local
 *.tsbuildinfo
+
+# api-extractor working area — committed snapshots live in packages/*/etc/
+packages/*/temp/

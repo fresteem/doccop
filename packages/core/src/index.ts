@@ -29,10 +29,10 @@ export { render as preview } from "./preview/HtmlRenderer.js";
 export type { RenderedHtml, AnchorMap, AnchorParagraph, AnchorSdt } from "./preview/types.js";
 
 // ─── placeholders subsystem ──────────────────────────────────────────────
-export { list, wrap, unwrap, replace } from "./placeholders/PlaceholderEngine.js";
+export { list, wrap, wrapBlock, unwrap, replace } from "./placeholders/PlaceholderEngine.js";
 export { decomposeTag, validateAlias } from "./placeholders/TagValidator.js";
 export type { DecomposedTag } from "./placeholders/TagValidator.js";
-export type { WrapLocation, PlaceholderSpec } from "./placeholders/types.js";
+export type { BlockWrapLocation, WrapLocation, PlaceholderSpec } from "./placeholders/types.js";
 
 // ─── render subsystem ────────────────────────────────────────────────────
 export { render } from "./render/DocxRenderer.js";
@@ -57,6 +57,7 @@ export type {
   EntityResolver,
   EntitySubtype,
   EntityType,
+  Logger,
   NamingContext,
   NamingService,
   NumberingService,
@@ -74,6 +75,8 @@ export type {
   UserId,
   VariableScope,
 } from "./types.js";
+
+export { NoopLogger } from "./types.js";
 
 export {
   AbsentValueInStrictModeError,

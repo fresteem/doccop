@@ -340,6 +340,44 @@ export interface RenderResult {
   durationMs: number;
 }
 
+// ─── Observability ──────────────────────────────────────────────────────────
+
+/**
+ * Structured logger contract injected by the host.
+ *
+ * The engine never imports a concrete logger. Hosts pass a pino/winston/
+ * console-based implementation via `DocCopConfig.logger`; default is
+ * `NoopLogger`.
+ *
+ * Levels follow the standard hierarchy (trace, debug, info, warn, error — increasing severity).
+ * `fields` is an optional structured payload merged into the log record;
+ * conventional keys: `tag`, `templateId`, `userId`, `durationMs`.
+ *
+ * The engine itself emits no log lines as of `0.1.0-alpha.1` — this
+ * interface is shipped first so that adopters can wire their logger
+ * before any behavioural logging lands in a follow-up release.
+ */
+export interface Logger {
+  trace(message: string, fields?: Record<string, unknown>): void;
+  debug(message: string, fields?: Record<string, unknown>): void;
+  info(message: string, fields?: Record<string, unknown>): void;
+  warn(message: string, fields?: Record<string, unknown>): void;
+  error(message: string, fields?: Record<string, unknown>): void;
+}
+
+/**
+ * Logger that drops every call. Default when `DocCopConfig.logger` is
+ * not set. Kept as an exported constant (not a class) so consumers can
+ * pass it directly without `new`.
+ */
+export const NoopLogger: Logger = {
+  trace: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
+
 // ─── Engine surface (set in stone for v1) ───────────────────────────────────
 
 /**
@@ -356,4 +394,6 @@ export interface DocCopConfig {
   auth?: AuthAdapter;
   limits?: Partial<EngineLimits>;
   render?: Partial<RenderOptions>;
+  /** Structured logger. Defaults to `NoopLogger`. */
+  logger?: Logger;
 }

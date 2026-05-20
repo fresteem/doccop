@@ -218,3 +218,82 @@ describe("DELETE /v1/templates/:id/placeholders/:tag", () => {
     expect(JSON.parse(res.body).version.versionNumber).toBe(3);
   });
 });
+
+describe("POST /v1/templates/:id/placeholders (wrapBlock)", () => {
+  it("wraps a single-paragraph block range and creates v2", async () => {
+    const created = JSON.parse((await uploadTemplate("WB", "Block body")).body);
+    const res = await rig.app.inject({
+      method: "POST",
+      url: `/v1/templates/${created.template.id}/placeholders`,
+      headers: { ...AUTH_HEADER, "content-type": "application/json" },
+      payload: JSON.stringify({
+        blockRange: { startParaId: "AAAA0001", endParaId: "AAAA0001" },
+        placeholder: {
+          tag: "requisites:party_a",
+          alias: "Реквізити А",
+          dataType: "text",
+        },
+        expectedVersionId: created.template.currentVersionId,
+      }),
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.version.versionNumber).toBe(2);
+    expect(body.version.placeholders).toHaveLength(1);
+    expect(body.version.placeholders[0].tag).toBe("requisites:party_a");
+  });
+
+  it("rejects when both `location` and `blockRange` are provided (400)", async () => {
+    const created = JSON.parse((await uploadTemplate("WB2", "x")).body);
+    const res = await rig.app.inject({
+      method: "POST",
+      url: `/v1/templates/${created.template.id}/placeholders`,
+      headers: { ...AUTH_HEADER, "content-type": "application/json" },
+      payload: JSON.stringify({
+        location: {
+          paraId: "AAAA0001",
+          startRunIndex: 0,
+          startOffset: 0,
+          endRunIndex: 0,
+          endOffset: 1,
+        },
+        blockRange: { startParaId: "AAAA0001", endParaId: "AAAA0001" },
+        placeholder: { tag: "requisites:party_a", alias: "R", dataType: "text" },
+        expectedVersionId: created.template.currentVersionId,
+      }),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error.code).toBe("INVALID_PLACEHOLDER_TAG");
+  });
+
+  it("rejects when neither `location` nor `blockRange` is provided (400)", async () => {
+    const created = JSON.parse((await uploadTemplate("WB3", "x")).body);
+    const res = await rig.app.inject({
+      method: "POST",
+      url: `/v1/templates/${created.template.id}/placeholders`,
+      headers: { ...AUTH_HEADER, "content-type": "application/json" },
+      payload: JSON.stringify({
+        placeholder: { tag: "requisites:party_a", alias: "R", dataType: "text" },
+        expectedVersionId: created.template.currentVersionId,
+      }),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error.code).toBe("INVALID_PLACEHOLDER_TAG");
+  });
+
+  it("rejects blockRange with a non-requisites tag (400)", async () => {
+    const created = JSON.parse((await uploadTemplate("WB4", "x")).body);
+    const res = await rig.app.inject({
+      method: "POST",
+      url: `/v1/templates/${created.template.id}/placeholders`,
+      headers: { ...AUTH_HEADER, "content-type": "application/json" },
+      payload: JSON.stringify({
+        blockRange: { startParaId: "AAAA0001", endParaId: "AAAA0001" },
+        placeholder: { tag: "party_a.full_name", alias: "Name", dataType: "text" },
+        expectedVersionId: created.template.currentVersionId,
+      }),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error.code).toBe("INVALID_PLACEHOLDER_TAG");
+  });
+});

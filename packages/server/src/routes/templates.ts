@@ -11,6 +11,7 @@
 
 import {
   AuthForbiddenError,
+  InvalidPlaceholderTagError,
   PlaceholderNotFoundError,
   VersionConflictError,
   ensureParaIds,
@@ -20,6 +21,7 @@ import {
   serialize,
   unwrap,
   wrap,
+  wrapBlock,
 } from "@doccop/core";
 import type { FastifyInstance } from "fastify";
 import type { DoccopServerConfig } from "../config.js";
@@ -137,7 +139,28 @@ export function registerTemplateRoutes(app: FastifyInstance, cfg: DoccopServerCo
     const archive = parse(bytes);
     ensureParaIds(archive);
 
-    const wrapped = wrap(archive, body.location, body.placeholder);
+    // `location` (inline) and `blockRange` (block) are mutually exclusive.
+    // Enforced here as a typed engine error so the response is 400 with
+    // the standard error envelope, not a generic Fastify 500.
+    if (body.blockRange !== undefined && body.location !== undefined) {
+      throw new InvalidPlaceholderTagError(
+        body.placeholder.tag,
+        "provide exactly one of `location` (inline) or `blockRange` (block)",
+      );
+    }
+    if (body.blockRange === undefined && body.location === undefined) {
+      throw new InvalidPlaceholderTagError(
+        body.placeholder.tag,
+        "provide exactly one of `location` (inline) or `blockRange` (block)",
+      );
+    }
+
+    const wrapped = body.blockRange
+      ? wrapBlock(archive, body.blockRange, body.placeholder)
+      : body.location
+        ? wrap(archive, body.location, body.placeholder)
+        : // Unreachable: the two guards above already throw when both are unset.
+          archive;
     const newBytes = serialize(wrapped);
     const newPlaceholders = list(wrapped);
 

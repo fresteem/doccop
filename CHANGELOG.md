@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.0] - 2026-05-20
+
+### Added
+- **`PlaceholderEngine.wrapBlock(archive, { startParaId, endParaId }, spec)`**
+  in `@doccop/core` — wraps an inclusive range of top-level paragraphs
+  into a block-level `<w:sdt>`. Intended for marking whole-paragraph
+  regions as `requisites:party_X` injection points. Mirrors `wrap()`'s
+  immutability contract; throws `InvalidPlaceholderTagError` /
+  `PlaceholderNotFoundError` / `OverlappingPlaceholderError` per the
+  same conventions. Single-paragraph blocks (`startParaId === endParaId`)
+  are supported. New exported type `BlockWrapLocation`.
+- **`Logger` interface and `NoopLogger`** default export in `@doccop/core`
+  — host-injectable structured logger contract on `DocCopConfig.logger`.
+  Engine emits no log lines as of this release; behavioural integration
+  lands in a follow-up minor without further public API changes.
+- **API surface snapshot tests** via `@microsoft/api-extractor` for all
+  three published packages. Snapshots committed at
+  `packages/*/etc/<unscoped>.api.md`. `npm run api:check` (also a CI step)
+  fails on any change to these without an explicit `breaking-change` PR
+  label and a populated `docs/migrations/X.Y-to-X.Y+1.md` entry.
+- **License-check automation** in CI (`license-checker`). Allowlist:
+  MIT / BSD-2 / BSD-3 / Apache-2.0 / ISC / CC0-1.0 / CC-BY-4.0 / 0BSD /
+  Python-2.0 / BlueOak-1.0.0.
+- **CI matrix:** Node 20 + Node 22 with `fail-fast: false`.
+- **Real-world `.docx` corpus scaffold** at `test/fixtures/real/` with
+  curation rules. Initial corpus is empty; `packages/core/test/integration/real-corpus.test.ts`
+  gracefully skips until files land, then asserts parse and round-trip
+  stability per file.
+- **Documentation scaffolding:** `AGENTS.md` (tool-agnostic agent rules
+  per agents.md spec), `SECURITY.md` (disclosure + threat model),
+  `docs/QUICKSTART.md`, `docs/INTEGRATION.md`, `docs/ARCHITECTURE.md`,
+  `docs/RELEASE_PROCESS.md`, `docs/migrations/TEMPLATE.md` (boilerplate
+  for breaking-change PRs).
+- **Five agent definitions** under `.claude/agents/` for project-specific
+  work decomposition (`doccop-backend-dev`, `doccop-headless-ui`,
+  `doccop-test-engineer`, `doccop-docs-writer`, `doccop-release-guardian`).
+- **Server schema:** `PlaceholderWrapSchema` accepts optional `blockRange:
+  { startParaId, endParaId }`. The existing `location` field is now also
+  optional. The `POST /v1/templates/:id/placeholders` route enforces
+  mutual exclusion in the handler and dispatches to `wrap` or
+  `wrapBlock` accordingly. Both/neither variants return 400 with
+  `INVALID_PLACEHOLDER_TAG`.
+
+### Changed
+- `README.md`: demo-app stack corrected to Fastify (was Express).
+
+### Fixed
+- **`PlaceholderEngine.replace` now preserves `<w:rPr>` from the wrapped
+  content's first descendant run.** Previously the run-property element
+  was discarded, dropping bold / italic / font-size / colour / font-
+  family from substituted values — critical regression for legal
+  documents where signatory names and IBANs are typically bold. Six new
+  tests cover preservation, fallback when no run is present, and per-SDT
+  fidelity across multi-binding tags. Known limitation: when an SDT body
+  contains multiple runs with differing formatting, only the first run's
+  `<w:rPr>` is applied (documented in the TSDoc).
+
+### Dependencies (devDependencies only)
+- `@microsoft/api-extractor` ^7.47.0 (MIT)
+- `license-checker` ^25.0.1 (BSD-3-Clause)
+
+### Unreleased (prior wave history below)
+
 ### Added
 - Wave 1: monorepo scaffold, `@doccop/core` interfaces, base CI.
 - Wave 2: docx subsystem.
