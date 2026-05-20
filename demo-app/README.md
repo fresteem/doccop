@@ -27,17 +27,19 @@ Both paths work — `typescript` and `tsx` are declared as devDependencies on `d
 
 ## CLI mode
 
-From the repo root:
+From inside `demo-app/`:
+
+```bash
+npm run cli
+```
+
+Or from the repo root (no `cd` needed):
 
 ```bash
 npm run cli --workspace=doccop-demo-app
 ```
 
-Or from inside `demo-app/`:
-
-```bash
-npm run cli
-```
+> The `--workspace=...` flag is only meaningful from the **repo root**. If you're already inside `demo-app/`, drop it — npm already knows which package you're in. Running `npm run cli --workspace=doccop-demo-app` from inside `demo-app/` fails with `No workspaces found` because npm looks for siblings starting from the current directory.
 
 Expected output:
 
@@ -69,20 +71,20 @@ Open output.docx in Microsoft Word to see the substituted contract.
 
 ## Server mode + browser UI
 
-From the repo root:
-
-```bash
-npm run start --workspace=doccop-demo-app
-# or, with hot reload:
-npm run dev --workspace=doccop-demo-app
-```
-
-Or from inside `demo-app/`:
+From inside `demo-app/`:
 
 ```bash
 npm run start
 # or, with tsx watch + hot reload on src/ changes:
 npm run dev
+```
+
+Or from the repo root (without `cd`):
+
+```bash
+npm run start --workspace=doccop-demo-app
+# or:
+npm run dev --workspace=doccop-demo-app
 ```
 
 Then **open <http://localhost:3000/> in a browser**. The UI has three sections:
