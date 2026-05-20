@@ -51,3 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Overlap detection: refuses to wrap a range that crosses an existing
     SDT (`OverlappingPlaceholderError`).
   - All mutations clone the archive — input is never touched.
+- Wave 5: DocxRenderer — variable substitution pipeline.
+  - `render(template, request, config, dataTypes?)` walks every SDT,
+    routes by scope to matching `EntityResolver`, validates the result
+    against the placeholder's declared data type, substitutes via
+    `PlaceholderEngine.replace`.
+  - Two-pass design: resolve everything first (no mutation), then apply
+    substitutions on a clone. Strict-mode failures throw before any
+    mutation — callers always get an all-or-nothing result.
+  - Strict mode (default): missing resolver / absent value / type
+    validation failure / requisites without resolver → throws.
+  - Non-strict mode: collects `RenderWarning[]`, substitutes
+    `{missing: <tag>}` marker text for missing values, completes.
+  - 10 runtime data type validators: text, number, integer, date (ISO),
+    boolean, edrpou (8 digits), rnokpp (10 digits), iban (normalises
+    spaces/case), email, phone (9-15 digits with punctuation).
+  - Requisites tags surfaced as `snippet_missing` warning (Wave 6 lands
+    actual XML injection).
+  - Image substitution out of scope for v1 — surfaces a warning.
+  - `RenderResult` returns `docx` bytes, `resolvedValues` audit map,
+    `warnings`, `durationMs`.
