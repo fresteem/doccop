@@ -1,0 +1,67 @@
+name: doccop release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist-tag:
+        description: "npm dist-tag (alpha, beta, latest)"
+        required: true
+        default: "alpha"
+        type: choice
+        options:
+          - alpha
+          - beta
+          - latest
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DIST_TAG: ${{ inputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # Publish in dependency order so npm sees @doccop/core before
+      # downstreams that depend on it. NPM_TOKEN is provisioned via
+      # the repo's Actions secret (created in repo settings → Actions).
+      - name: Publish @doccop/core
+        working-directory: packages/core
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @doccop/server
+        working-directory: packages/server
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @doccop/storage-postgres
+        working-directory: packages/storage-postgres
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
