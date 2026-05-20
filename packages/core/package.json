@@ -37,5 +37,9 @@
     "type": "git",
     "url": "git+https://github.com/doccop-org/doccop.git",
     "directory": "packages/core"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "0.9.10",
+    "pizzip": "3.2.0"
   }
 }
