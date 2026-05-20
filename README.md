@@ -23,7 +23,7 @@ doccop is a database-agnostic, framework-agnostic engine for generating `.docx` 
 | `@doccop/server` | Fastify HTTP server wrapping the core for typical web integration. |
 | `@doccop/storage-postgres` | Drizzle-backed reference storage adapter. |
 | `@doccop/react-ui` | React components for the template editor and generation flow. |
-| `demo-app` | Standalone Express + Postgres example app showing full integration. |
+| `demo-app` | Standalone Fastify + Postgres example app showing full integration. |
 
 ## Quickstart
 
