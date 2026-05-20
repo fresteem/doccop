@@ -23,9 +23,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Typecheck
-        run: npm run typecheck
-
+      # `build` invokes tsc which type-checks AND emits dist/. Downstream
+      # workspaces resolve @doccop/* via node_modules symlinks that point
+      # at dist/, so it must run before any step that imports cross-
+      # package types (test, separate typecheck).
       - name: Build
         run: npm run build
 

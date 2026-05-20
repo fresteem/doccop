@@ -36,9 +36,7 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Typecheck
-        run: npm run typecheck
-
+      # Build before test/typecheck — see ci.yml comment for why.
       - name: Build
         run: npm run build
 
